@@ -1,0 +1,14 @@
+{
+  "name": "clawd-run",
+  "version": "0.1.0",
+  "description": "While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "delaySeconds": {
+      "type": "number",
+      "title": "Start after (seconds)",
+      "description": "How long a turn has to run before Clawd starts playing; default 20.",
+      "default": 20
+    }
+  }
+}
