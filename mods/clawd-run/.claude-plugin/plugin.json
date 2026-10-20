@@ -1,6 +1,6 @@
 {
   "name": "clawd-run",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt",
   "types": "./types/index.d.ts",
   "userConfig": {
