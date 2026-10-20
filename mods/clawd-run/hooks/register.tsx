@@ -58,7 +58,7 @@ export const register: Register = (on, options) => {
       <Client
         key="clawd-run"
         module="./game.tsx"
-        props={{ rows, columns: e.props.bodyColumns, isWorking: e.props.isWorking }}
+        props={{ rows, columns: e.props.bodyColumns, isWorking: e.props.isWorking, surface: e.surface }}
         height={rows}
         width="100%"
       />

@@ -1,9 +1,9 @@
-import type { ClientModule, ClientSurface, JsonValue } from 'claude-code'
+import type { ClientModule, ClientSurface, JsonValue, RenderElement } from 'claude-code'
 
 // An original side-scroller Clawd plays by itself: pipes, gaps, bugs to stomp
 // and coins, generated as the camera moves. Runs on the surface's frame clock.
 
-type Props = { rows: number; columns: number; isWorking: boolean }
+type Props = { rows: number; columns: number; isWorking: boolean; surface: string }
 
 type Bug = { x: number; dir: number; squashedFor: number }
 type Coin = { x: number; y: number; isTaken: boolean }
@@ -167,6 +167,8 @@ function build(game: Game, rows: number, to: number): void {
 
 function isSolid(game: Game, rows: number, col: number, row: number): boolean {
   if (col < 0) return true
+  // the tally's row is a ceiling
+  if (row < 1) return true
   const top = groundRow(rows)
   if (row >= top) return game.ground[col] === true
   const tall = game.pipe[col] ?? 0
@@ -498,6 +500,13 @@ const draw: ClientModule<JsonValue, State> = (raw, surface: ClientSurface<State>
 
   const grid = paint(state.game, rows, columns, props.isWorking)
 
+  return props.surface === 'desktop' ? drawPixels(grid, surface) : drawGlyphs(grid, surface)
+}
+
+// The terminal: each cell a glyph, half blocks for Clawd's pixels.
+function drawGlyphs(grid: Cell[][], surface: ClientSurface<State>): RenderElement {
+  const { Box, Text } = surface.elements
+
   return (
     <Box flexDirection="column">
       {grid.map((line, r) => {
@@ -519,6 +528,87 @@ const draw: ClientModule<JsonValue, State> = (raw, surface: ClientSurface<State>
                 <Text mono>{run.s}</Text>
               ),
             )}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+// What a glyph fills of its cell, as two pixels: the top half, the bottom half.
+const FILL: Record<string, 'top' | 'bottom' | 'both'> = {
+  '█': 'both', '▓': 'both', '▐': 'both', '▌': 'both', '▙': 'both', '▟': 'both',
+  '●': 'both', '◐': 'both', '◑': 'both', '│': 'both', '▆': 'both', '▅': 'both',
+  '▀': 'top', '▄': 'bottom', '▃': 'bottom', '▁': 'bottom', '▂': 'bottom',
+}
+
+type Span = { n: number; color?: string }
+
+function spans(colors: (string | undefined)[]): Span[] {
+  const out: Span[] = []
+  for (const color of colors) {
+    const last = out[out.length - 1]
+    if (last && last.color === color) last.n += 1
+    else out.push({ n: 1, color })
+  }
+  return out
+}
+
+// The desktop: glyphs there leave gaps between rows and differ in width, so
+// the scene is drawn as coloured boxes, each row two pixel rows high; words
+// (the tally, the sparks) stay text.
+function drawPixels(grid: Cell[][], surface: ClientSurface<State>): RenderElement {
+  const { Box, Text } = surface.elements
+
+  return (
+    <Box flexDirection="column">
+      {grid.map((line, r) => {
+        // runs of pixel cells and runs of words, in order
+        const parts: ({ kind: 'px'; cells: Cell[] } | { kind: 'text'; s: string; color?: string })[] = []
+        for (const cell of line) {
+          const last = parts[parts.length - 1]
+          // a blank after words stays with them, so a phrase is one text
+          // the tally's row is all words
+          const isPixel = r > 0 && (cell.ch === ' ' ? last?.kind !== 'text' : FILL[cell.ch] !== undefined)
+          if (isPixel) {
+            if (last?.kind === 'px') last.cells.push(cell)
+            else parts.push({ kind: 'px', cells: [cell] })
+          } else if (last?.kind === 'text' && (last.color === cell.color || cell.ch === ' ')) last.s += cell.ch
+          else parts.push({ kind: 'text', s: cell.ch, color: cell.color })
+        }
+        return (
+          <Box key={`r${r}`} flexDirection="row" height={1}>
+            {parts.map(part => {
+              if (part.kind === 'text') {
+                // as wide as its cells, whatever the font's advance
+                return (
+                  <Box width={part.s.length} height={1} overflow="hidden">
+                    <Text mono color={part.color} wrap="truncate">
+                      {part.s}
+                    </Text>
+                  </Box>
+                )
+              }
+              const top = part.cells.map(cell => {
+                const fill = FILL[cell.ch]
+                return fill === 'both' || fill === 'top' ? cell.color : fill === 'bottom' ? cell.bg : undefined
+              })
+              const bottom = part.cells.map(cell => {
+                const fill = FILL[cell.ch]
+                return fill === 'both' || fill === 'bottom' ? cell.color : fill === 'top' ? cell.bg : undefined
+              })
+              return (
+                <Box flexDirection="column" width={part.cells.length} height={1}>
+                  {[top, bottom].map(half => (
+                    <Box flexDirection="row" height="50%">
+                      {spans(half).map(span => (
+                        <Box width={span.n} height="100%" backgroundColor={span.color} />
+                      ))}
+                    </Box>
+                  ))}
+                </Box>
+              )
+            })}
           </Box>
         )
       })}
