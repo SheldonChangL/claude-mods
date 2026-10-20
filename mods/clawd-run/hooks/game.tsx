@@ -3,7 +3,15 @@ import type { ClientModule, ClientSurface, JsonValue, RenderElement } from 'clau
 // An original side-scroller Clawd plays by itself: pipes, gaps, bugs to stomp
 // and coins, generated as the camera moves. Runs on the surface's frame clock.
 
-type Props = { rows: number; columns: number; isWorking: boolean; surface: string }
+type Props = {
+  rows: number
+  columns: number
+  isWorking: boolean
+  surface: string
+  // what the running turn has used
+  tokens: number
+  usd: number | null
+}
 
 type Bug = { x: number; dir: number; squashedFor: number }
 type Coin = { x: number; y: number; isTaken: boolean }
@@ -385,7 +393,18 @@ function tick(game: Game, rows: number, columns: number): void {
 
 type Cell = { ch: string; color?: string; bg?: string }
 
-function paint(game: Game, rows: number, columns: number, isWorking: boolean): Cell[][] {
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`
+  return String(n)
+}
+
+function formatUsd(usd: number): string {
+  return usd < 1 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`
+}
+
+function paint(game: Game, rows: number, columns: number, props: Props): Cell[][] {
+  const isWorking = props.isWorking
   const grid: Cell[][] = []
   for (let r = 0; r < rows; r++) {
     const line: Cell[] = []
@@ -469,7 +488,9 @@ function paint(game: Game, rows: number, columns: number, isWorking: boolean): C
   // the tally on the top row
   const seconds = Math.floor((game.ticks * TICK_MS) / 1000)
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  const hud = `CLAWD ${String(game.score).padStart(6, '0')}  ● ×${game.coinsTaken}  ▟▙ ×${game.stomps}  ⏱ ${clock}`
+  // this turn's tokens and their cost, then how long Clawd has been running
+  const cost = props.usd === null ? '' : `  ${formatUsd(props.usd)}`
+  const hud = `${formatTokens(props.tokens)} tokens${cost}  ⏱ ${clock}`
   text(1, 0, hud, ORANGE)
   const note =
     game.manualFor > 0
@@ -518,7 +539,7 @@ const draw: ClientModule<JsonValue, State> = (raw, surface: ClientSurface<State>
   state.view.rows = rows
   state.view.columns = columns
 
-  const grid = paint(state.game, rows, columns, props.isWorking)
+  const grid = paint(state.game, rows, columns, props)
 
   return props.surface === 'desktop' ? drawPixels(grid, surface) : drawGlyphs(grid, surface)
 }
