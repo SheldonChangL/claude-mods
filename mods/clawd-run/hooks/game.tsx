@@ -47,23 +47,66 @@ type State = { game: Game; view: View; frame: number }
 const TICK_MS = 50
 const SPEED = 0.5
 const GRAVITY = 0.17
-const JUMP = 1.5
+const JUMP = 1.3
 const SCREEN_X = 10
 // how long without an arrow before the autopilot plays again: 6 s
 const IDLE_TICKS = 120
 
-// Clawd as Claude Code's welcome screen draws it: 9 cells by 3 rows; the
-// legs alternate while running.
-const BODY = [' ▐▛███▜▌ ', '▝▜█████▛▘']
-const LEGS = ['  ▘▘ ▝▝  ', '  ▝▘ ▘▝  ']
-const TUCK = '  ▝▘ ▝▘  '
-const W = 9
-const H = 3
+// Clawd in pixels, after Claude Desktop's own sprite at half its size: 12 by
+// 8, O body, s shade, E eyes. Each text row draws two pixel rows (half blocks),
+// so Clawd takes 12 cells by 4 rows. The legs alternate while running.
+const STAND = [
+  '..OOOOOOOO..',
+  '..OEOOOOEO..',
+  'OOOOOOOOOOOO',
+  'OOOOOOOOOOOO',
+  '..OOOOOOOO..',
+  '..OOOOOOOO..',
+  '..O.O..O.O..',
+  '..O.O..O.O..',
+]
+const RUN = [
+  [
+    '..sOOOOOOO..',
+    '..sEOOOOEO..',
+    'ssOOOOOOOOOO',
+    'ssOOOOOOOOOO',
+    '..sOOOOOOO..',
+    '..sOOOOOOO..',
+    '..s.O..O.O..',
+    '..s....O....',
+  ],
+  [
+    '..sOOOOOOO..',
+    '..sEOOOOEO..',
+    'ssOOOOOOOOOO',
+    'ssOOOOOOOOOO',
+    '..sOOOOOOO..',
+    '..sOOOOOOO..',
+    '..s.O..O.O..',
+    '....O....O..',
+  ],
+]
+const LEAP = [
+  '...O....O...',
+  '..OOO..OOO..',
+  '..OOOOOOOO..',
+  '..OEOOOOEO..',
+  '..OOOOOOOO..',
+  '..OOOOOOOO..',
+  '..O.O..O.O..',
+  '............',
+]
+const W = 12
+const H = 4
 // the cells that collide: the body less its arms
-const HIT_L = 1
-const HIT_R = 8
+const HIT_L = 2
+const HIT_R = 10
 
 const ORANGE = '#D97757'
+const SHADE = '#BF694D'
+const EYE = '#141413'
+const PIXEL: Record<string, string> = { O: ORANGE, s: SHADE, E: EYE }
 const BRICK = '#C0582E'
 const SOIL = '#7A3B1A'
 const PIPE = '#3FA34D'
@@ -111,7 +154,7 @@ function build(game: Game, rows: number, to: number): void {
       // coins over the gap, along the jump
       game.coins.push({ x: c - Math.ceil(gap / 2), y: top - H - 3, isTaken: false })
     } else if (pick < 0.85) {
-      const tall = Math.min(rows - 6, 2 + Math.floor(rand(game) * 3))
+      const tall = Math.min(rows - 8, 2 + Math.floor(rand(game) * 2))
       for (let i = 0; i < 4; i++, c++) {
         game.ground[c] = true
         game.pipe[c] = tall
@@ -318,7 +361,7 @@ function tick(game: Game, rows: number, columns: number): void {
   game.sparks = game.sparks.filter(spark => spark.ttl > 0)
 }
 
-type Cell = { ch: string; color?: string }
+type Cell = { ch: string; color?: string; bg?: string }
 
 function paint(game: Game, rows: number, columns: number, isWorking: boolean): Cell[][] {
   const grid: Cell[][] = []
@@ -379,9 +422,22 @@ function paint(game: Game, rows: number, columns: number, isWorking: boolean): C
   if (!isHidden) {
     const col = Math.floor(game.x) - cam
     const row = Math.round(game.y)
-    const legs = game.isOnGround ? (LEGS[(game.ticks >> 1) % 2] ?? TUCK) : TUCK
-    BODY.forEach((line, i) => text(col, row + i, line, ORANGE))
-    text(col, row + BODY.length, legs, ORANGE)
+    const art = game.isOnGround ? (RUN[(game.ticks >> 2) % 2] ?? STAND) : LEAP
+    // two pixel rows to a cell: the top as the glyph's colour, the bottom
+    // as the cell's background when both are drawn
+    for (let i = 0; i < H; i++) {
+      const top = art[2 * i] ?? ''
+      const bottom = art[2 * i + 1] ?? ''
+      for (let x = 0; x < W; x++) {
+        const up = PIXEL[top.charAt(x)]
+        const down = PIXEL[bottom.charAt(x)]
+        const line = grid[row + i]
+        if (!line || col + x < 0 || col + x >= columns) continue
+        if (up && down) line[col + x] = up === down ? { ch: '█', color: up } : { ch: '▀', color: up, bg: down }
+        else if (up) line[col + x] = { ch: '▀', color: up }
+        else if (down) line[col + x] = { ch: '▄', color: down }
+      }
+    }
   }
 
   for (const spark of game.sparks) {
@@ -445,17 +501,23 @@ const draw: ClientModule<JsonValue, State> = (raw, surface: ClientSurface<State>
   return (
     <Box flexDirection="column">
       {grid.map((line, r) => {
-        const runs: { s: string; color?: string }[] = []
+        const runs: { s: string; color?: string; bg?: string }[] = []
         for (const cell of line) {
           const last = runs[runs.length - 1]
           // a blank takes no colour: it joins the run before it
-          if (last && (last.color === cell.color || cell.ch === ' ')) last.s += cell.ch
-          else runs.push({ s: cell.ch, color: cell.color })
+          if (last && ((last.color === cell.color && last.bg === cell.bg) || (cell.ch === ' ' && !last.bg))) last.s += cell.ch
+          else runs.push({ s: cell.ch, color: cell.color, bg: cell.bg })
         }
         return (
           <Box key={`r${r}`} flexDirection="row">
             {runs.map(run =>
-              run.color ? <Text mono color={run.color}>{run.s}</Text> : <Text mono>{run.s}</Text>,
+              run.color ? (
+                <Text mono color={run.color} backgroundColor={run.bg}>
+                  {run.s}
+                </Text>
+              ) : (
+                <Text mono>{run.s}</Text>
+              ),
             )}
           </Box>
         )
