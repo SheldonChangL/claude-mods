@@ -52,9 +52,9 @@ const SCREEN_X = 10
 // how long without an arrow before the autopilot plays again: 6 s
 const IDLE_TICKS = 120
 
-// Clawd in pixels, after Claude Desktop's own sprite at half its size: 12 by
+// Clawd in pixels, designed by Codex after Claude Desktop's own sprite: 12 by
 // 8, O body, s shade, E eyes. Each text row draws two pixel rows (half blocks),
-// so Clawd takes 12 cells by 4 rows. The legs alternate while running.
+// so Clawd takes 12 cells by 4 rows. RUN is a four-frame cycle.
 const STAND = [
   '..OOOOOOOO..',
   '..OEOOOOEO..',
@@ -67,24 +67,44 @@ const STAND = [
 ]
 const RUN = [
   [
-    '..sOOOOOOO..',
-    '..sEOOOOEO..',
-    'ssOOOOOOOOOO',
-    'ssOOOOOOOOOO',
-    '..sOOOOOOO..',
-    '..sOOOOOOO..',
-    '..s.O..O.O..',
-    '..s....O....',
+    '..OOOOOOOO..',
+    '..OEOOOOEO..',
+    'OOOOOOOOOOOO',
+    'OOOOOOOOOOOO',
+    '..OOOOOOOO..',
+    '..OOOOOOOO..',
+    '..O.O..s.O..',
+    '.OO.O..s.OO.',
   ],
   [
-    '..sOOOOOOO..',
-    '..sEOOOOEO..',
-    'ssOOOOOOOOOO',
-    'ssOOOOOOOOOO',
-    '..sOOOOOOO..',
-    '..sOOOOOOO..',
-    '..s.O..O.O..',
-    '....O....O..',
+    '..OOOOOOOO..',
+    '..OEOOOOEO..',
+    'OOOOOOOOOOOO',
+    'OOOOOOOOOOOO',
+    '..OOOOOOOO..',
+    '..OOOOOOOO..',
+    '...Os..Os...',
+    '...O...O....',
+  ],
+  [
+    '..OOOOOOOO..',
+    '..OEOOOOEO..',
+    'OOOOOOOOOOOO',
+    'OOOOOOOOOOOO',
+    '..OOOOOOOO..',
+    '..OOOOOOOO..',
+    '..s.O..O.s..',
+    '..s.O..O.ss.',
+  ],
+  [
+    '..OOOOOOOO..',
+    '..OEOOOOEO..',
+    'OOOOOOOOOOOO',
+    'OOOOOOOOOOOO',
+    '..OOOOOOOO..',
+    '..OOOOOOOO..',
+    '...O.s.sO...',
+    '...O....O...',
   ],
 ]
 const LEAP = [
@@ -424,7 +444,7 @@ function paint(game: Game, rows: number, columns: number, isWorking: boolean): C
   if (!isHidden) {
     const col = Math.floor(game.x) - cam
     const row = Math.round(game.y)
-    const art = game.isOnGround ? (RUN[(game.ticks >> 2) % 2] ?? STAND) : LEAP
+    const art = game.isOnGround ? (RUN[(game.ticks >> 1) % RUN.length] ?? STAND) : LEAP
     // two pixel rows to a cell: the top as the glyph's colour, the bottom
     // as the cell's background when both are drawn
     for (let i = 0; i < H; i++) {
