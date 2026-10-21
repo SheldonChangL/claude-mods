@@ -57,6 +57,22 @@ let inFlight = false
 let nextId = 1
 let currentModel = 'haiku'
 let sideStops = new Set<AbortController>()
+// 使用者往上捲去看舊的就不再自動跟到底，捲回底部再恢復
+let following = true
+
+// 新內容進來時把面板捲到底，像聊天室；先捲一次，再等重繪完成後補一次
+async function followEnd($: EngineInterface) {
+  if (!following) return
+  for (const wait of [0, 80]) {
+    try {
+      if (wait > 0) await $.clock.sleep(wait)
+      if (!following) return
+      await $.ui.scroll({ in: PANE, to: 'end' })
+    } catch {
+      // 面板沒開或測試環境沒有實作時略過
+    }
+  }
+}
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(-n) : s)
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -105,6 +121,7 @@ async function ask($: EngineInterface) {
       const item: Entry = { id: nextId++, kind: 'narration', text: r.text.trim(), time: now() }
       await update($, feed, list => [...list, item].slice(-FEED_MAX))
       await update($, diag, d => ({ ...d, last: '成功' }))
+      void followEnd($)
     } else {
       const why = r.isAnswered ? 'Haiku 回了空字串' : r.reason === 'api-error' ? `api-error ${r.status ?? ''}` : r.reason
       await update($, diag, d => ({ ...d, last: `失敗：${why}` }))
@@ -153,6 +170,9 @@ async function sideAsk($: EngineInterface, question: string) {
       { id: aid, kind: 'answer', text: '', time: now(), model, pending: true } satisfies Entry,
     ].slice(-FEED_MAX)
   })
+  // 自己發問就一定跟到底
+  following = true
+  void followEnd($)
 
   let text: string
   const stop = new AbortController()
@@ -177,6 +197,7 @@ async function sideAsk($: EngineInterface, question: string) {
   }
   if (stop.signal.aborted) return
   await update($, feed, list => list.map(e => (e.id === aid ? { ...e, text, pending: false } : e)))
+  void followEnd($)
 }
 
 async function saveModel($: EngineInterface, value: string) {
@@ -263,6 +284,12 @@ export const register: Register = on => {
       await update($, isThinking, () => false)
       void ask($)
     }
+
+    return next(e)
+  })
+
+  on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (e.origin.kind === 'person') following = e.offset >= e.contentRows - e.bodyRows - 1
 
     return next(e)
   })
