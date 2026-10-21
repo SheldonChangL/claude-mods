@@ -104,6 +104,27 @@ export function tokens(n: number): string {
   return String(n)
 }
 
+/**
+ * Known windows with fresh readings laid over them by kind, less any whose
+ * reset has passed. The account's windows are the same in every session, so a
+ * reading another session (or this one before a restart) stored still holds.
+ */
+export function mergeWindows(known: readonly Window[], fresh: readonly Window[], now: number): Window[] {
+  const byKind = new Map<string, Window>()
+  for (const w of [...known, ...fresh]) byKind.set(w.kind, w)
+  return [...byKind.values()].filter(w => !w.resetsAt || Date.parse(w.resetsAt) > now)
+}
+
+/** Windows as `$.store` gave them back, checked; [] for anything else. */
+export function parseWindows(value: unknown): Window[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(w =>
+    w && typeof w === 'object' && typeof w.kind === 'string' && Number.isFinite(w.percentUsed)
+      ? [{ kind: w.kind, percentUsed: w.percentUsed, ...(typeof w.resetsAt === 'string' ? { resetsAt: w.resetsAt } : {}) }]
+      : [],
+  )
+}
+
 export type Inputs = {
   windows: Window[]
   context: Context | null

@@ -10,7 +10,7 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import type { Context, ProbeStatus, SysSample, Window } from '../types'
 import { GAP_CAPSULE, GAP_GROUP, capsuleLayout } from './capsule'
 import type { Capsule } from './capsule'
-import { TERMINAL_FILL, lineSplitter, meters, parseSample, terminalLayout } from './model'
+import { TERMINAL_FILL, lineSplitter, mergeWindows, meters, parseSample, parseWindows, terminalLayout } from './model'
 
 const sys = atom({ plugin: 'pillbar', key: 'sys' } as const, null as SysSample | null)
 const probe = atom({ plugin: 'pillbar', key: 'probe' } as const, 'starting' as ProbeStatus)
@@ -28,6 +28,26 @@ const toWindows = (limits: readonly { kind: string; percentUsed: number; resetsA
 
 /** The figures alone: never the /context breakdown. */
 const toContext = ({ tokens, window, percent }: Context): Context => ({ tokens, window, percent })
+
+/** The last quota windows any session read, kept across sessions and restarts. */
+const STORE_WINDOWS = 'windows'
+/** How often a session picks up a reading another session stored. */
+const STORE_POLL_MS = 60_000
+
+/**
+ * Lays `fresh` readings (and what `$.store` holds) over the known windows. A
+ * session the engine has not yet answered reports no windows: that keeps the
+ * last reading rather than blanking it.
+ */
+async function rememberWindows($: EngineInterface, fresh: readonly Window[]) {
+  const now = await $.clock.now()
+  const stored = parseWindows(await $.store.get(STORE_WINDOWS))
+  // The store holds the newest reading any session took, so it outranks this
+  // session's earlier copy; a fresh reading outranks both.
+  const merged = mergeWindows(mergeWindows(await read($, windows), stored, now), fresh, now)
+  await update($, windows, () => merged)
+  if (fresh.length > 0) await $.store.set(STORE_WINDOWS, merged)
+}
 
 // Module memory: a reload starts the sampler over (the old child is killed).
 let isProbing = false
@@ -77,21 +97,40 @@ async function runProbe($: EngineInterface) {
   }
 }
 
+let isPolling = false
+
+/** Picks up readings other sessions store, and drops windows that reset. */
+async function pollStoredWindows($: EngineInterface) {
+  if (isPolling) return
+  isPolling = true
+  try {
+    for (;;) {
+      await $.clock.sleep(STORE_POLL_MS)
+      await rememberWindows($, [])
+    }
+  } catch {
+    // The module unloaded mid-sleep.
+  } finally {
+    isPolling = false
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await $.command.register({ name: 'pillbar', description: 'Show or hide the quota and system meters above the prompt' })
     try {
       const usage = await $.session.usage()
-      await update($, windows, () => toWindows(usage.rateLimits))
+      await rememberWindows($, toWindows(usage.rateLimits))
       await update($, context, () => toContext(usage.context))
     } catch {}
     void runProbe($)
+    void pollStoredWindows($)
     return started
   })
 
   on('session.measure', async ($, e, next) => {
-    if (e.changed.includes('rateLimits')) await update($, windows, () => toWindows(e.rateLimits))
+    if (e.changed.includes('rateLimits')) await rememberWindows($, toWindows(e.rateLimits))
     if (e.changed.includes('context')) await update($, context, () => toContext(e.context))
     return next(e)
   })

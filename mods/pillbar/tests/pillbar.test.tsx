@@ -8,8 +8,10 @@ import {
   freeGigabytes,
   gigabytes,
   lineSplitter,
+  mergeWindows,
   meters,
   parseSample,
+  parseWindows,
   terminalLayout,
   tightCountdown,
 } from '../hooks/model'
@@ -76,6 +78,16 @@ describe('model', () => {
     }
   })
 
+  test('stored windows: fresh readings win by kind, reset windows drop, junk is ignored', () => {
+    const old = [{ kind: 'five_hour', percentUsed: 10, resetsAt: new Date(NOW - 1000).toISOString() }, WINDOWS[1]!]
+    expect(mergeWindows(old, [], NOW)).toEqual([WINDOWS[1]])
+    expect(mergeWindows(old, [WINDOWS[0]!], NOW)).toEqual(WINDOWS)
+    expect(mergeWindows([WINDOWS[1]!], [{ ...WINDOWS[1]!, percentUsed: 50 }], NOW)[0]!.percentUsed).toBe(50)
+    expect(parseWindows(JSON.parse(JSON.stringify(WINDOWS)))).toEqual(WINDOWS)
+    expect(parseWindows([{ kind: 1 }, null, { kind: 'x', percentUsed: 'a' }])).toEqual([])
+    expect(parseWindows('nope')).toEqual([])
+  })
+
   test('sampler lines split across pieces are joined; garbage is dropped', () => {
     const split = lineSplitter()
     const line = JSON.stringify(SAMPLE)
@@ -136,7 +148,19 @@ const BAND = (bodyColumns: number) =>
     props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   }) as const
 
-async function start($: any, on: any, surface: string) {
+/** `$.store` beneath the plugin, readable by the test. */
+function stubStore(on: any, entries: Record<string, unknown>) {
+  const store = new Map(Object.entries(entries))
+  on('store.get', async (_$: unknown, e: any) => ({ value: store.get(e.key) }))
+  on('store.set', async (_$: unknown, e: any) => {
+    store.set(e.key, JSON.parse(JSON.stringify(e.value)))
+    return { value: undefined }
+  })
+  return store
+}
+
+async function start($: any, on: any, surface: string, { rateLimits = WINDOWS, stored }: { rateLimits?: unknown[]; stored?: unknown } = {}) {
+  const store = stubStore(on, stored === undefined ? {} : { windows: stored })
   on('clock.now', async () => ({ value: NOW }))
   on('session.start', async () => ({ cwd: '/' }))
   // The engine's own band, drawn when the plugin passes.
@@ -145,7 +169,7 @@ async function start($: any, on: any, surface: string) {
     return <Box key="engine-band" />
   })
   on('command.register', async (_$: unknown, e: any) => ({ value: { command: e.name } }))
-  on('session.usage', async () => ({ value: { startedAt: NOW, context: { ...CONTEXT, breakdown: { gridRows: [] } }, rateLimits: WINDOWS } }))
+  on('session.usage', async () => ({ value: { startedAt: NOW, context: { ...CONTEXT, breakdown: { gridRows: [] } }, rateLimits } }))
   on('process.spawn', async function* () {
     yield { stream: 'stdout', text: `${JSON.stringify(SAMPLE)}\n` }
     return { value: { code: 0, signal: null } }
@@ -156,7 +180,7 @@ async function start($: any, on: any, surface: string) {
     const ui = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(200) })
     const cpu = await ui.find({ key: 'pillbar-cpu' })
     await ui.unmount()
-    if (JSON.stringify(cpu ?? '').includes('19%')) return
+    if (JSON.stringify(cpu ?? '').includes('19%')) return store
     await new Promise<void>(resolve => setTimeout(resolve, 10))
   }
   throw new Error('the sampler never wrote a sample')
@@ -177,6 +201,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ key: 'engine-band' })).toBeDefined()
       await ui.unmount()
     }
+  })
+
+  test(`${surface}: after a restart, before the engine has a reading, the stored quota shows`, async ($, on) => {
+    // The engine reports no windows yet; the store holds the last session's reading.
+    await start($, on, surface, { rateLimits: [], stored: WINDOWS })
+    const ui = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(200) })
+    expect(JSON.stringify(await ui.find({ key: 'pillbar-5h' }))).toContain('29%')
+    expect(JSON.stringify(await ui.find({ key: 'pillbar-week' }))).toContain('41%')
+    await ui.unmount()
+  })
+
+  test(`${surface}: a fresh reading is stored for the next session`, async ($, on) => {
+    const store = await start($, on, surface)
+    expect(parseWindows(store.get('windows'))).toEqual(WINDOWS)
   })
 
   test(`${surface}: /pillbar hides the band and shows it again`, async ($, on) => {
