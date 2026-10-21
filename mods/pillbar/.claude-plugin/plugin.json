@@ -1,6 +1,6 @@
 {
   "name": "pillbar",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Capsule band above the prompt: 5-hour, weekly and Fable quota, CPU, memory and disk",
   "types": "./types/index.d.ts"
 }

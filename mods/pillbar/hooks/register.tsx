@@ -10,7 +10,7 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import type { Context, ProbeStatus, SysSample, Window } from '../types'
 import { GAP_CAPSULE, GAP_GROUP, capsuleLayout } from './capsule'
 import type { Capsule } from './capsule'
-import { TERMINAL_FILL, lineSplitter, mergeWindows, meters, parseSample, parseWindows, terminalLayout } from './model'
+import { TERMINAL_FILL, lineSplitter, mergeWindows, meters, parseQuotaLine, parseSample, parseWindows, terminalLayout } from './model'
 
 const sys = atom({ plugin: 'pillbar', key: 'sys' } as const, null as SysSample | null)
 const probe = atom({ plugin: 'pillbar', key: 'probe' } as const, 'starting' as ProbeStatus)
@@ -19,8 +19,8 @@ const context = atom({ plugin: 'pillbar', key: 'context' } as const, null as Con
 const isHidden = atom({ plugin: 'pillbar', key: 'isHidden' } as const, false)
 
 const INTERVAL_MS = 3000
-/** CPU is drawn as the mean of the last 30 s of samples. */
-const CPU_WINDOW = Math.round(30_000 / INTERVAL_MS)
+/** CPU is drawn as the mean of the last 30 s of samples (local every 3 s, the daemon's every 5 s). */
+const CPU_WINDOW_MS = 30_000
 const RETRIES = 3
 
 const toWindows = (limits: readonly { kind: string; percentUsed: number; resetsAt?: string }[]): Window[] =>
@@ -55,13 +55,15 @@ let isProbing = false
 async function runProbe($: EngineInterface) {
   if (isProbing) return
   isProbing = true
-  const script = `${$.plugin.root}/bin/sysprobe.mjs`
+  // The feed reads the JetDeck daemon (vitals and the plan usage) when it can,
+  // and samples locally when it cannot (bin/feed.mjs).
+  const script = `${$.plugin.root}/bin/feed.mjs`
   const candidates = [
     ['node', script, String(INTERVAL_MS)],
     // Desktop may start the engine without nvm's PATH: ask an interactive zsh.
     ['/bin/zsh', '-ilc', 'exec node "$0" "$1"', script, String(INTERVAL_MS)],
   ]
-  const cpu: number[] = []
+  const cpu: { at: number; value: number }[] = []
   try {
     for (let attempt = 0; attempt < RETRIES; attempt += 1) {
       for (const argv of candidates) {
@@ -71,11 +73,16 @@ async function runProbe($: EngineInterface) {
           for await (const piece of $.process.spawn({ argv })) {
             if (!('text' in piece) || piece.stream !== 'stdout') continue
             for (const line of split(piece.text)) {
+              const quota = parseQuotaLine(line)
+              if (quota) {
+                await rememberWindows($, quota)
+                continue
+              }
               const sample = parseSample(line)
               if (!sample) continue
-              cpu.push(sample.cpu)
-              if (cpu.length > CPU_WINDOW) cpu.shift()
-              const mean = Math.round((cpu.reduce((a, b) => a + b, 0) / cpu.length) * 10) / 10
+              cpu.push({ at: sample.at, value: sample.cpu })
+              while (cpu.length > 1 && sample.at - cpu[0]!.at > CPU_WINDOW_MS) cpu.shift()
+              const mean = Math.round((cpu.reduce((a, b) => a + b.value, 0) / cpu.length) * 10) / 10
               if (!gotLine) await update($, probe, () => 'live')
               gotLine = true
               await update($, sys, () => ({ ...sample, cpu: mean }))

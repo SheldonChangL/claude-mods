@@ -115,6 +115,28 @@ export function mergeWindows(known: readonly Window[], fresh: readonly Window[],
   return [...byKind.values()].filter(w => !w.resetsAt || Date.parse(w.resetsAt) > now)
 }
 
+/**
+ * A feed `quota` line (the JetDeck daemon's plan-usage read) as windows in the
+ * engine's own shape; null when the line is not one or holds no reading yet.
+ */
+export function parseQuotaLine(line: string): Window[] | null {
+  let v: any
+  try {
+    v = JSON.parse(line)
+  } catch {
+    return null
+  }
+  if (v?.type !== 'quota' || !Number.isFinite(v.fetchedAt)) return null
+  const out: Window[] = []
+  for (const [kind, w] of [
+    ['five_hour', v.fiveHour],
+    ['seven_day', v.sevenDay],
+  ] as const) {
+    if (w && Number.isFinite(w.percentUsed)) out.push({ kind, percentUsed: w.percentUsed, ...(typeof w.resetsAt === 'string' ? { resetsAt: w.resetsAt } : {}) })
+  }
+  return out
+}
+
 /** Windows as `$.store` gave them back, checked; [] for anything else. */
 export function parseWindows(value: unknown): Window[] {
   if (!Array.isArray(value)) return []
@@ -293,6 +315,7 @@ export function lineSplitter() {
 export function parseSample(line: string): SysSample | null {
   try {
     const v = JSON.parse(line)
+    if (v?.type !== undefined && v.type !== 'sys') return null
     const bytes = (b: unknown) =>
       typeof b === 'object' && b !== null && Number.isFinite((b as any).used) && Number.isFinite((b as any).total)
     if (!Number.isFinite(v?.cpu) || !bytes(v.mem) || !bytes(v.disk) || !Number.isFinite(v.at)) return null

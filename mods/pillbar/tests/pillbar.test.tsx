@@ -10,6 +10,7 @@ import {
   lineSplitter,
   mergeWindows,
   meters,
+  parseQuotaLine,
   parseSample,
   parseWindows,
   terminalLayout,
@@ -88,6 +89,17 @@ describe('model', () => {
     expect(parseWindows('nope')).toEqual([])
   })
 
+  test("feed quota lines (the JetDeck daemon's read) become windows; no reading yet is null", () => {
+    const line = JSON.stringify({ type: 'quota', fiveHour: { percentUsed: 16, resetsAt: WINDOWS[0]!.resetsAt }, sevenDay: { percentUsed: 23, resetsAt: null }, scoped: [], state: 'ok', errorCode: null, fetchedAt: NOW })
+    expect(parseQuotaLine(line)).toEqual([{ kind: 'five_hour', percentUsed: 16, resetsAt: WINDOWS[0]!.resetsAt }, { kind: 'seven_day', percentUsed: 23 }])
+    expect(parseQuotaLine(JSON.stringify({ type: 'quota', fiveHour: null, sevenDay: null, state: 'error', errorCode: 'keychain-denied', fetchedAt: null }))).toBeNull()
+    expect(parseQuotaLine(JSON.stringify({ type: 'sys', cpu: 1 }))).toBeNull()
+    expect(parseQuotaLine('noise')).toBeNull()
+    // A sys line is a sample; a quota or source line is not.
+    expect(parseSample(JSON.stringify({ ...SAMPLE, type: 'sys', source: 'daemon' }))).toEqual(SAMPLE)
+    expect(parseSample(JSON.stringify({ type: 'source', source: 'daemon', quota: true }))).toBeNull()
+  })
+
   test('sampler lines split across pieces are joined; garbage is dropped', () => {
     const split = lineSplitter()
     const line = JSON.stringify(SAMPLE)
@@ -159,7 +171,12 @@ function stubStore(on: any, entries: Record<string, unknown>) {
   return store
 }
 
-async function start($: any, on: any, surface: string, { rateLimits = WINDOWS, stored }: { rateLimits?: unknown[]; stored?: unknown } = {}) {
+async function start(
+  $: any,
+  on: any,
+  surface: string,
+  { rateLimits = WINDOWS, stored, feed = [] }: { rateLimits?: unknown[]; stored?: unknown; feed?: unknown[] } = {},
+) {
   const store = stubStore(on, stored === undefined ? {} : { windows: stored })
   on('clock.now', async () => ({ value: NOW }))
   on('session.start', async () => ({ cwd: '/' }))
@@ -171,6 +188,7 @@ async function start($: any, on: any, surface: string, { rateLimits = WINDOWS, s
   on('command.register', async (_$: unknown, e: any) => ({ value: { command: e.name } }))
   on('session.usage', async () => ({ value: { startedAt: NOW, context: { ...CONTEXT, breakdown: { gridRows: [] } }, rateLimits } }))
   on('process.spawn', async function* () {
+    for (const line of feed) yield { stream: 'stdout', text: `${JSON.stringify(line)}\n` }
     yield { stream: 'stdout', text: `${JSON.stringify(SAMPLE)}\n` }
     return { value: { code: 0, signal: null } }
   })
@@ -210,6 +228,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(JSON.stringify(await ui.find({ key: 'pillbar-5h' }))).toContain('29%')
     expect(JSON.stringify(await ui.find({ key: 'pillbar-week' }))).toContain('41%')
     await ui.unmount()
+  })
+
+  test(`${surface}: the daemon's quota shows before the engine has answered anything`, async ($, on) => {
+    // No engine windows, nothing stored: the feed's quota line alone fills 5h and 7d, and is stored.
+    const quota = { type: 'quota', fiveHour: { percentUsed: 16, resetsAt: WINDOWS[0]!.resetsAt }, sevenDay: { percentUsed: 23, resetsAt: WINDOWS[1]!.resetsAt }, scoped: [], state: 'ok', errorCode: null, fetchedAt: NOW }
+    const store = await start($, on, surface, { rateLimits: [], feed: [{ type: 'source', source: 'daemon', quota: true }, quota] })
+    const ui = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(200) })
+    expect(JSON.stringify(await ui.find({ key: 'pillbar-5h' }))).toContain('16%')
+    expect(JSON.stringify(await ui.find({ key: 'pillbar-week' }))).toContain('23%')
+    await ui.unmount()
+    expect(parseWindows(store.get('windows')).map(w => w.percentUsed)).toEqual([16, 23])
   })
 
   test(`${surface}: a fresh reading is stored for the next session`, async ($, on) => {
