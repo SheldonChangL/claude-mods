@@ -1,14 +1,16 @@
 // A one-row band above the prompt: the account's 5-hour and weekly windows and
-// this session's context window, then this machine's CPU, memory and disk. Design by Codex: on
-// Desktop a label, a rounded SVG track and `20% · resets in 5d 14h`, as
-// Claude's /usage panel draws them; on the terminal thin `━━──` lines.
+// this session's context window, then this machine's CPU, memory and disk.
+// Design by Codex: on Desktop one tinted SVG capsule per meter (capsule.ts),
+// quota bars with a marker for how far the window has run; on the terminal
+// thin `━━──` lines.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import type { Context, ProbeStatus, SysSample, Window } from '../types'
-import { TERMINAL_FILL, desktopLayout, lineSplitter, meters, parseSample, terminalLayout } from './model'
-import type { DesktopMeter } from './model'
+import { GAP_CAPSULE, GAP_GROUP, capsuleLayout } from './capsule'
+import type { Capsule } from './capsule'
+import { TERMINAL_FILL, lineSplitter, meters, parseSample, terminalLayout } from './model'
 
 const sys = atom({ plugin: 'pillbar', key: 'sys' } as const, null as SysSample | null)
 const probe = atom({ plugin: 'pillbar', key: 'probe' } as const, 'starting' as ProbeStatus)
@@ -122,25 +124,23 @@ export const register: Register = on => {
 
     if (e.surface === 'desktop') {
       const { Svg } = $.ui.resolve(e)
-      const band = desktopLayout(ms, e.props.bodyColumns)
-      // Meters never shrink (a squeezed one drew over its neighbour); one row
-      // that is still too wide wraps whole meters instead.
-      const meter = (d: DesktopMeter) => (
-        <Box key={`pillbar-${d.key}`} flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
-          <Text size="caption" color="text">
-            {d.label}
-          </Text>
-          <Svg source={d.svg} alt={d.alt} width={d.bar.width} height={d.bar.height} />
-          <Text size="caption" color="subtle" tabular>
-            {d.status}
-          </Text>
+      const band = capsuleLayout(ms, e.props.bodyColumns)
+      // Capsules never shrink (a squeezed one drew over its neighbour); a row
+      // still too wide wraps whole capsules instead.
+      const capsule = (c: Capsule) => (
+        <Box key={`pillbar-${c.key}`} flexShrink={0}>
+          <Svg source={c.svg} alt={c.alt} width={c.width} height={32} />
+        </Box>
+      )
+      const group = (cs: Capsule[]) => (
+        <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={GAP_CAPSULE} flexShrink={0}>
+          {cs.map(capsule)}
         </Box>
       )
       return stack(
-        <Box key="pillbar" flexDirection="row" alignItems="center" flexWrap="wrap" columnGap={2} rowGap={0}>
-          {band.quota.map(meter)}
-          <Text color="inactive">│</Text>
-          {band.system.map(meter)}
+        <Box key="pillbar" flexDirection="row" alignItems="center" flexWrap="wrap" columnGap={GAP_GROUP} rowGap={1}>
+          {group(band.quota)}
+          {group(band.system)}
         </Box>,
       )
     }

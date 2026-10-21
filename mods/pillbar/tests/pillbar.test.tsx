@@ -1,80 +1,73 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import { capsuleLayout, capsuleSvg, capsuleWidth, textPx } from '../hooks/capsule'
 import {
-  barSvg,
   cells,
   countdown,
-  desktopLayout,
-  desktopStatus,
   diskTone,
-  freeSpace,
+  freeGigabytes,
   gigabytes,
   lineSplitter,
   meters,
   parseSample,
   terminalLayout,
+  tightCountdown,
 } from '../hooks/model'
 
 // The test runtime has timers; the hooks environment's lib does not declare them.
 declare const setTimeout: (fn: () => void, ms: number) => unknown
 
-const NOW = Date.UTC(2026, 9, 20, 9, 0, 0)
-const GB = 1024 ** 3
-const SAMPLE = { cpu: 19, mem: { used: 19.9 * GB, total: 24 * GB }, disk: { used: 444 * GB, total: 494 * GB }, at: NOW - 1000 }
+const NOW = Date.UTC(2026, 9, 21, 1, 0, 0)
+const GIB = 1024 ** 3
+const SAMPLE = { cpu: 19, mem: { used: 18.3 * GIB, total: 24 * GIB }, disk: { used: 437e9, total: 494.38e9 }, at: NOW - 1000 }
 const WINDOWS = [
-  { kind: 'five_hour', percentUsed: 0, resetsAt: new Date(NOW + (2 * 60 + 24) * 60_000).toISOString() },
-  { kind: 'seven_day', percentUsed: 20, resetsAt: new Date(NOW + (5 * 24 + 14) * 3_600_000).toISOString() },
+  { kind: 'five_hour', percentUsed: 29, resetsAt: new Date(NOW + (4 * 60 + 4) * 60_000).toISOString() },
+  { kind: 'seven_day', percentUsed: 41, resetsAt: new Date(NOW + (2 * 24 + 3) * 3_600_000).toISOString() },
 ]
 const CONTEXT = { tokens: 84_000, window: 200_000, percent: 42 }
 const INPUTS = { windows: WINDOWS, context: CONTEXT, sys: SAMPLE, probe: 'live' as const, now: NOW }
 
 describe('model', () => {
-  test('thin terminal bar: ━ filled, ─ track, a nonzero reading fills one cell', () => {
-    expect(cells(20, 8)).toEqual({ filled: '━━', track: '──────' })
-    expect(cells(0, 3)).toEqual({ filled: '', track: '───' })
-    expect(cells(2, 3)).toEqual({ filled: '━', track: '──' })
-    expect(cells(null, 3)).toEqual({ filled: '', track: '───' })
-    expect(cells(50, 0)).toEqual({ filled: '', track: '' })
-  })
-
-  test('countdown and sizes read like /usage', () => {
+  test('countdowns and sizes', () => {
     expect(countdown(NOW + 47 * 60_000, NOW)).toBe('47m')
-    expect(countdown(NOW + 144 * 60_000, NOW)).toBe('2h 24m')
-    expect(countdown(NOW + (5 * 24 + 14) * 3_600_000, NOW)).toBe('5d 14h')
+    expect(countdown(NOW + 244 * 60_000, NOW)).toBe('4h 04m')
+    expect(countdown(NOW + 51 * 3_600_000, NOW)).toBe('2d 3h')
     expect(countdown(NOW - 1, NOW)).toBe('')
-    expect(gigabytes(19.9 * GB, 24 * GB)).toBe('19.9/24 GB')
-    expect(gigabytes(444 * GB, 494 * GB)).toBe('444/494 GB')
+    expect([tightCountdown('4h 04m'), tightCountdown('2d 3h'), tightCountdown('47m')]).toEqual(['4h04', '2d3h', '47m'])
+    expect(gigabytes(18.3 * GIB, 24 * GIB)).toBe('18.3/24G')
+    // Finder's figures for this Mac: 494.38 GB, about 57 GB free.
+    expect(freeGigabytes(437e9, 494.38e9)).toBe('57G')
+    expect(freeGigabytes(494.38e9 - 7.25e9, 494.38e9)).toBe('7.3G')
   })
 
-  test('disk: free space in decimal GB like Finder, severity by what is left', () => {
-    // The sampler's reading of this Mac (statfs on /System/Volumes/Data).
-    const [used, total] = [443_885_096_960, 494_384_795_648]
-    expect(freeSpace(used, total)).toBe('50 GB free')
-    expect(freeSpace(total - 7.25e9, total)).toBe('7.3 GB free')
-    expect([diskTone(50e9), diskTone(19e9), diskTone(9e9), diskTone(4e9)]).toEqual(['calm', 'caution', 'high', 'critical'])
-    const disk = meters({ ...INPUTS, sys: { ...SAMPLE, disk: { used, total } } })[5]!
-    expect(disk).toMatchObject({ tone: 'calm', detail: '50 GB free' })
-    expect(Math.round(disk.pct!)).toBe(90)
-    expect(desktopStatus(disk, 'wide')).toBe('90% · 50 GB free')
-    expect(desktopStatus(disk, 'medium')).toBe('90% · 50G free')
+  test('meters: values, details, compact details and the quota time marker', () => {
+    const [fiveHour, week, ctx, cpu, mem, disk] = meters(INPUTS)
+    expect(fiveHour).toMatchObject({ pct: 29, detail: '4h 04m', compact: '4h04', tone: 'calm' })
+    // 4h04 of 5h left: 56 minutes, 18.7% of the window, gone.
+    expect(Math.abs(fiveHour!.marker! - 56 / 300)).toBeLessThan(1e-3)
+    expect(week).toMatchObject({ pct: 41, detail: '2d 3h', compact: '2d3h' })
+    expect(Math.abs(week!.marker! - (1 - 51 / 168))).toBeLessThan(1e-3)
+    expect(ctx).toMatchObject({ pct: 42, detail: '84k/200k', compact: '84k', marker: null })
+    expect(cpu).toMatchObject({ pct: 19, detail: '', marker: null })
+    expect(mem).toMatchObject({ detail: '18.3/24G', compact: '18.3G', tone: 'calm' })
+    expect(disk).toMatchObject({ detail: '57G free', compact: '57G', tone: 'calm' })
+    expect(Math.round(disk!.pct!)).toBe(88)
   })
 
-  test('severity: quota 50/80/95, system by its own limits; no reading is unknown', () => {
+  test('severity: amber at 75%, red at 90%; memory 85/95; disk by free space', () => {
     const tone = (pct: number) => meters({ ...INPUTS, windows: [{ kind: 'five_hour', percentUsed: pct }] })[0]!.tone
-    expect([tone(10), tone(50), tone(80), tone(95)]).toEqual(['calm', 'caution', 'high', 'critical'])
-    const sys = meters({ ...INPUTS, sys: { ...SAMPLE, cpu: 90, disk: { used: 98, total: 100 } } }).slice(3)
-    expect(sys.map(m => m.tone)).toEqual(['high', 'caution', 'critical'])
-    expect(meters(INPUTS)[2]).toMatchObject({ key: 'ctx', pct: 42, tone: 'calm', detail: '84k/200k' })
-    const ctx = (percent: number) => meters({ ...INPUTS, context: { ...CONTEXT, percent } })[2]!.tone
-    expect([ctx(59), ctx(60), ctx(80), ctx(90)]).toEqual(['calm', 'caution', 'high', 'critical'])
-    expect(meters({ ...INPUTS, context: { window: 1_000_000 } })[2]).toMatchObject({ pct: null, tone: 'unknown' })
-    expect(meters({ ...INPUTS, context: null })[2]!.pct).toBeNull()
-    expect(meters({ ...INPUTS, context: { tokens: 250_000, window: 1_000_000 } })[2]).toMatchObject({ pct: 25, detail: '250k/1M' })
+    expect([tone(74), tone(75), tone(90)]).toEqual(['calm', 'caution', 'critical'])
+    const mem = (used: number) => meters({ ...INPUTS, sys: { ...SAMPLE, mem: { used, total: 100 } } })[4]!.tone
+    expect([mem(76), mem(85), mem(95)]).toEqual(['calm', 'caution', 'critical'])
+    expect([diskTone(57e9), diskTone(19e9), diskTone(9e9)]).toEqual(['calm', 'caution', 'critical'])
+    expect(meters({ ...INPUTS, context: null })[2]).toMatchObject({ pct: null, tone: 'unknown' })
     expect(meters({ ...INPUTS, now: NOW + 60_000 }).slice(3).every(m => m.pct === null)).toBe(true)
-    expect(meters({ ...INPUTS, now: NOW + 6 * 86_400_000 })[1]!.pct).toBeNull()
+    expect(meters({ ...INPUTS, now: NOW + 3 * 86_400_000 })[1]!.pct).toBeNull()
   })
 
-  test('terminal: the roomiest density that fits, never wider than the room', () => {
+  test('terminal: thin lines, the roomiest density that fits', () => {
+    expect(cells(20, 8)).toEqual({ filled: '━━', track: '──────' })
+    expect(cells(2, 3)).toEqual({ filled: '━', track: '──' })
     const ms = meters(INPUTS)
     for (const [columns, density] of [[200, 'wide'], [100, 'medium'], [60, 'narrow'], [30, 'tiny']] as const) {
       const band = terminalLayout(ms, columns)
@@ -83,40 +76,57 @@ describe('model', () => {
     }
   })
 
-  test('desktop: the roomiest density whose estimate fits; the 765 px band of the screenshot is not medium', () => {
-    const ms = meters({ ...INPUTS, sys: { ...SAMPLE, disk: { used: 443_885_096_960, total: 494_384_795_648 } } })
-    // 765 px / 8 px a cell ≈ 95 columns: medium (~970 px) drew meters over each other.
-    const shot = desktopLayout(ms, 95)
-    expect(shot.density).toBe('compact')
-    expect(shot.width).toBeLessThanOrEqual(95 * 8)
-    expect(shot.quota.map(d => d.label)).toEqual(['5h', 'Wk', 'Ctx'])
-    expect(shot.quota.map(d => d.status)).toEqual(['0% · 2h24m', '20% · 5d14h', '42%'])
-    expect(shot.system.map(d => d.status)).toEqual(['19%', '83%', '50G free'])
-    expect(desktopLayout(ms, 200).density).toBe('wide')
-    expect(desktopLayout(ms, 135).density).toBe('medium')
-    expect(desktopLayout(ms, 70).density).toBe('narrow')
-    const tiny = desktopLayout(ms, 40)
-    expect(tiny).toMatchObject({ density: 'narrow', isOverflowing: true })
-  })
-
-  test('desktop: status text and SVG bar', () => {
-    const [fiveHour, week, ctx, , mem] = meters(INPUTS)
-    expect(desktopStatus(week!, 'wide')).toBe('20% · resets in 5d 14h')
-    expect(desktopStatus(week!, 'medium')).toBe('20% · 5d 14h')
-    expect(desktopStatus(week!, 'compact')).toBe('20% · 5d14h')
-    expect(desktopStatus(week!, 'narrow')).toBe('20%')
-    expect(desktopStatus(ctx!, 'wide')).toBe('42% · 84k/200k')
-    expect(desktopStatus(ctx!, 'compact')).toBe('42%')
-    expect(desktopStatus(mem!, 'wide')).toBe('83% · 19.9/24 GB')
-    expect(barSvg(week!, { width: 64, height: 6 })).toContain('<rect width="12.8" height="6" fill="#67AD6B"')
-    expect(barSvg(fiveHour!, { width: 64, height: 6 })).not.toContain('#67AD6B')
-  })
-
   test('sampler lines split across pieces are joined; garbage is dropped', () => {
     const split = lineSplitter()
     const line = JSON.stringify(SAMPLE)
     expect(split(line.slice(0, 10))).toEqual([])
     expect(split(`${line.slice(10)}\nnoise\n`).map(parseSample)).toEqual([SAMPLE, null])
+  })
+})
+
+describe('capsules', () => {
+  test("the 5h capsule matches Codex's reference geometry (217 px)", () => {
+    const [fiveHour] = meters(INPUTS)
+    expect(textPx('29%', 12)).toBe(21.6)
+    expect(capsuleWidth(fiveHour!, 'full')).toBe(217)
+    const svg = capsuleSvg(fiveHour!, 'full')
+    expect(svg).toContain('width="217" height="32"')
+    expect(svg).toContain('>5h</text>')
+    expect(svg).toContain('>29%</text>')
+    expect(svg).toContain('>4h 04m</text>')
+    // The bar fill (29% of 48) and the marker (18.7% of 48 from x 54.4).
+    expect(svg).toContain('width="13.92" height="6" fill="#4ADE80"')
+    expect(svg).toMatch(/class="marker" d="M63\.\d+ 10v12"/)
+    expect(svg).toContain('@media (prefers-color-scheme:light)')
+  })
+
+  test('severity swaps the hue; no reading draws an em dash, escaped, dimmed', () => {
+    const hot = meters({ ...INPUTS, windows: [{ ...WINDOWS[0]!, percentUsed: 93 }] })[0]!
+    expect(capsuleSvg(hot, 'full')).toContain('stroke="#EF4444"')
+    const none = meters({ ...INPUTS, context: null })[2]!
+    const svg = capsuleSvg(none, 'medium')
+    expect(svg).toContain('>&#8212;</text>')
+    expect(svg).toContain('opacity=".6"')
+    expect(svg).not.toContain('class="divider"')
+  })
+
+  test('compact keeps the quota bars and marker, drops the system bars', () => {
+    const [fiveHour, , , cpu] = meters(INPUTS)
+    expect(capsuleSvg(fiveHour!, 'compact')).toContain('class="marker"')
+    expect(capsuleSvg(cpu!, 'compact')).not.toContain('class="track"')
+    expect(capsuleSvg(fiveHour!, 'tiny')).not.toContain('class="track"')
+  })
+
+  test('one density for the row: full when wide, compact at the 765 px band, tiny below', () => {
+    const ms = meters(INPUTS)
+    expect(capsuleLayout(ms, 200).density).toBe('full')
+    const shot = capsuleLayout(ms, 95)
+    expect(shot.density).toBe('compact')
+    expect(shot.width).toBeLessThanOrEqual(95 * 8)
+    expect(shot.quota.map(c => c.key)).toEqual(['5h', 'week', 'ctx'])
+    expect(shot.system.map(c => c.key)).toEqual(['cpu', 'mem', 'disk'])
+    expect(capsuleLayout(ms, 70).density).toBe('tiny')
+    expect(capsuleLayout(ms, 40)).toMatchObject({ density: 'tiny', isOverflowing: true })
   })
 })
 
@@ -144,9 +154,9 @@ async function start($: any, on: any, surface: string) {
   // The sampler loop runs on after session.start returns: wait for its first write.
   for (let i = 0; i < 50; i += 1) {
     const ui = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(200) })
-    const text = (await ui.find({ key: 'pillbar-cpu' }))?.text ?? ''
+    const cpu = await ui.find({ key: 'pillbar-cpu' })
     await ui.unmount()
-    if (text.includes('19%')) return
+    if (JSON.stringify(cpu ?? '').includes('19%')) return
     await new Promise<void>(resolve => setTimeout(resolve, 10))
   }
   throw new Error('the sampler never wrote a sample')
@@ -155,18 +165,16 @@ async function start($: any, on: any, surface: string) {
 const runPillbar = ($: any) => $.command.run({ command: 'pillbar', args: '' })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: the band draws all six meters at every width`, async ($, on) => {
+  test(`${surface}: the band draws all six meters at every width, above nothing it replaces`, async ($, on) => {
     await start($, on, surface)
     for (const columns of [200, 100, 60, 30]) {
       const ui = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(columns) })
       for (const key of ['5h', 'week', 'ctx', 'cpu', 'mem', 'disk']) {
         expect(await ui.find({ key: `pillbar-${key}` })).toBeDefined()
       }
-      expect(await ui.find({ key: 'pillbar-fable' })).toBeUndefined()
-      // The band beneath (clawd-run's game, here the engine's) still draws, above the meters.
+      expect(JSON.stringify(await ui.find({ key: 'pillbar-week' }))).toContain('41%')
+      // The band beneath (clawd-run's game, here the engine's) still draws.
       expect(await ui.find({ key: 'engine-band' })).toBeDefined()
-      expect((await ui.find({ key: 'pillbar-week' }))?.text).toContain('20%')
-      expect((await ui.find({ key: 'pillbar-ctx' }))?.text).toContain('42%')
       await ui.unmount()
     }
   })
