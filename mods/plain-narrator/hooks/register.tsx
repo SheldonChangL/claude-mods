@@ -276,6 +276,8 @@ export const register: Register = on => {
     const model = await read($, chatModel)
     const text = await read($, draft)
     const canAsk = e.surface !== 'mobile'
+    // 終端機寬度以欄計、行高寶貴：旁白的時間和內容排同一行
+    const inline = e.surface === 'terminal'
 
     // 時間軸用固定數量的格子，只換內容：終端機 pane 的樹結構一變就會失去鍵盤，打字打到一半會被打斷
     const fixed = canAsk ? 10 : 6
@@ -304,7 +306,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" justifyContent="space-between">
-          <Text dimColor={!thinking}>{thinking ? '● Claude 工作中…' : '○ 閒置'}</Text>
+          <Box flexDirection="row" gap={1}>
+            <Text color={thinking ? 'claude' : 'inactive'}>{thinking ? '●' : '○'}</Text>
+            <Text dimColor={!thinking}>{thinking ? 'Claude 工作中…' : '閒置'}</Text>
+          </Box>
           <Button
             key="narrator-clear"
             dimColor
@@ -326,10 +331,11 @@ export const register: Register = on => {
           {rows.map((n, i) => (
             <Box
               key={`narrator-slot-${i}`}
-              flexDirection="column"
+              flexDirection={inline && n?.kind === 'narration' ? 'row' : 'column'}
+              gap={inline && n?.kind === 'narration' ? 2 : 0}
               paddingLeft={n !== undefined && n.kind !== 'narration' ? 2 : 0}
             >
-              <Text dimColor={n?.kind !== 'question'} bold={n?.kind === 'answer'}>
+              <Text dimColor={n?.kind !== 'answer'} color={n?.kind === 'answer' ? 'claude' : undefined}>
                 {header(n)}
               </Text>
               <Markdown
