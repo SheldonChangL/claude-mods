@@ -1,8 +1,7 @@
 // A one-row band above the prompt: the account's 5-hour and weekly windows and
 // this session's context window, then this machine's CPU, memory and disk.
 // Design by Codex: on Desktop one tinted SVG capsule per meter (capsule.ts),
-// quota bars with a marker for how far the window has run; on the terminal
-// thin `━━──` lines.
+// quota bars with a countdown to the reset; on the terminal thin `━━──` lines.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'

@@ -8,8 +8,7 @@ import { percent } from './model'
 
 /**
  * full: icon label bar value | clock detail; medium: icon bar value | detail;
- * compact: quota and context keep a short bar (and the time marker), system
- * meters drop theirs; tiny: icon value short-detail.
+ * compact: quota and context keep a short bar, system meters drop theirs; tiny: icon value short-detail.
  */
 export type CapsuleDensity = 'full' | 'medium' | 'compact' | 'tiny'
 
@@ -43,7 +42,6 @@ const LIGHT: Record<MeterKey | 'amber' | 'red', Hue> = {
 }
 
 const TRACK = { dark: 'rgba(148,163,184,.18)', light: 'rgba(15,23,42,.14)' }
-const MARKER = { dark: 'rgba(241,245,249,.92)', light: 'rgba(30,41,59,.82)' }
 
 /** Severity replaces the meter's own hue; no reading keeps it, dimmed. */
 const hueKey = (key: MeterKey, tone: Tone) => (tone === 'critical' ? 'red' : tone === 'caution' ? 'amber' : key)
@@ -149,10 +147,6 @@ export function capsuleSvg(m: Meter, density: CapsuleDensity): string {
       body.push(`<clipPath id="${clip}"><rect x="${r2(x)}" y="13" width="${p.width}" height="6" rx="3"/></clipPath>`)
       body.push(`<rect class="track" x="${r2(x)}" y="13" width="${p.width}" height="6" rx="3" fill="${TRACK.dark}"/>`)
       if (fill > 0) body.push(`<rect class="bar" x="${r2(x)}" y="13" width="${fill}" height="6" fill="${dBar}" clip-path="url(#${clip})"/>`)
-      if (m.marker !== null) {
-        const mx = r2(x + p.width * m.marker)
-        body.push(`<path class="marker" d="M${mx} 10v12" stroke="${MARKER.dark}" stroke-width="1.5" stroke-linecap="round"/>`)
-      }
     } else if (p.kind === 'divider') {
       body.push(`<rect class="divider" x="${r2(x)}" y="8" width="1" height="16" rx=".5" fill="${dLabel}" fill-opacity=".28"/>`)
     }
@@ -167,7 +161,7 @@ export function capsuleSvg(m: Meter, density: CapsuleDensity): string {
   const style =
     `<style>.${root} text{font-family:${FONT}}@media (prefers-color-scheme:light){` +
     `${s('shell')}{fill:${lFill};fill-opacity:.07;stroke:${lStroke};stroke-opacity:.45}` +
-    `${s('icon')}{color:${lIcon}}${s('track')}{fill:${TRACK.light}}${s('bar')}{fill:${lBar}}${s('marker')}{stroke:${MARKER.light}}` +
+    `${s('icon')}{color:${lIcon}}${s('track')}{fill:${TRACK.light}}${s('bar')}{fill:${lBar}}` +
     `${s('label')}{fill:${lLabel}}${s('value')}{fill:${lValue}}${s('detail')}{fill:${lDetail}}${s('divider')}{fill:${lLabel}}}</style>`
   const inset = STROKE / 2
   return (

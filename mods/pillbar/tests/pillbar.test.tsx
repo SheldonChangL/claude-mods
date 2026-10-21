@@ -118,9 +118,9 @@ describe('capsules', () => {
     expect(svg).toContain('>5h</text>')
     expect(svg).toContain('>29%</text>')
     expect(svg).toContain('>4h 04m</text>')
-    // The bar fill (29% of 48) and the marker (18.7% of 48 from x 54.4).
+    // The bar fill (29% of 48), with no elapsed-time line across it.
     expect(svg).toContain('width="13.92" height="6" fill="#4ADE80"')
-    expect(svg).toMatch(/class="marker" d="M63\.\d+ 10v12"/)
+    expect(svg).not.toContain('class="marker"')
     expect(svg).toContain('@media (prefers-color-scheme:light)')
   })
 
@@ -134,9 +134,9 @@ describe('capsules', () => {
     expect(svg).not.toContain('class="divider"')
   })
 
-  test('compact keeps the quota bars and marker, drops the system bars', () => {
+  test('compact keeps the quota bars, drops the system bars', () => {
     const [fiveHour, , , cpu] = meters(INPUTS)
-    expect(capsuleSvg(fiveHour!, 'compact')).toContain('class="marker"')
+    expect(capsuleSvg(fiveHour!, 'compact')).toContain('class="track"')
     expect(capsuleSvg(cpu!, 'compact')).not.toContain('class="track"')
     expect(capsuleSvg(fiveHour!, 'tiny')).not.toContain('class="track"')
   })
