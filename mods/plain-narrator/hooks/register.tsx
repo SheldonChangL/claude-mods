@@ -1,17 +1,32 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Diag, Narration } from '../types'
+import type { Diag, Entry } from '../types'
 
 const PANE = 'plain-narrator'
-const narrations = atom({ plugin: 'plain-narrator', key: 'narrations' } as const, [])
+const TITLE = 'Claude 在做什麼'
+const feed = atom({ plugin: 'plain-narrator', key: 'feed' } as const, [])
 const isThinking = atom({ plugin: 'plain-narrator', key: 'isThinking' } as const, false)
 const EMPTY_DIAG: Diag = { steps: 0, thinkingChars: 0, textChars: 0, asks: 0, last: '尚未呼叫' }
 const diag = atom({ plugin: 'plain-narrator', key: 'diag' } as const, EMPTY_DIAG)
+const chatModel = atom({ plugin: 'plain-narrator', key: 'chatModel' } as const, 'haiku')
+const draft = atom({ plugin: 'plain-narrator', key: 'draft' } as const, '')
 
 // 最多每幾毫秒問一次 Haiku，避免思考串流時狂打 API
 const MIN_GAP_MS = 7000
 const BUFFER_CHARS = 4000
+const FEED_MAX = 40
+const STORE_MODEL = 'chatModel'
+
+// side chat 可選的模型；main 走 $.model.fork，帶主對話完整上下文
+const MODELS = [
+  { value: 'haiku', label: 'Haiku（快）', name: 'Haiku' },
+  { value: 'sonnet', label: 'Sonnet', name: 'Sonnet' },
+  { value: 'opus', label: 'Opus', name: 'Opus' },
+  { value: 'fable', label: 'Fable', name: 'Fable' },
+  { value: 'main', label: '同主對話（含完整上下文）', name: '主對話' },
+] as const
+const modelName = (v: string) => MODELS.find(m => m.value === v)?.name ?? v
 
 const SYSTEM = [
   '你是旁白員。使用者在旁邊看一個 AI 程式助手（Claude）工作，看不懂它的內部思考。',
@@ -22,14 +37,33 @@ const SYSTEM = [
   '不要逐字複述，不要用條列，不要加開場白，不要猜測沒出現的內容。',
 ].join('\n')
 
+const SIDE_SYSTEM = [
+  '你是旁觀席上的解說員。使用者一邊看 AI 程式助手（Claude）工作，一邊在側邊問你問題。',
+  '你會收到 Claude 最近的活動紀錄、先前的白話旁白，以及你和使用者之前的問答。',
+  '只根據這些內容回答；看不出來的就說看不出來，不要編造。',
+  '用繁體中文、白話、簡短回答（通常 2～5 句），必要時可用行內 code 標出檔名或指令。',
+].join('\n')
+
+const FORK_NOTE = [
+  '（這是使用者在側邊面板提出的旁觀問題，不是新的工作指示。',
+  '請不要使用工具、不要改變計畫，只用繁體中文白話簡短回答。）',
+].join('')
+
 // 模組層變數：reload 時重來即可
 let buffer = ''
 let unsent = false
 let lastAskAt = 0
 let inFlight = false
 let nextId = 1
+let currentModel = 'haiku'
+let sideStops = new Set<AbortController>()
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(-n) : s)
+const pad = (n: number) => String(n).padStart(2, '0')
+const now = () => {
+  const d = new Date()
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 // 工具參數裡最能說明意圖的欄位，依序取有值的
 const ARG_KEYS = ['description', 'command', 'file_path', 'path', 'pattern', 'query', 'url', 'prompt', 'skill', 'action']
@@ -68,10 +102,8 @@ async function ask($: EngineInterface) {
       timeoutMs: 20000,
     })
     if (r.isAnswered && r.text.trim() !== '') {
-      const d = new Date()
-      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
-      const item: Narration = { id: nextId++, text: r.text.trim(), time }
-      await update($, narrations, list => [...list, item].slice(-30))
+      const item: Entry = { id: nextId++, kind: 'narration', text: r.text.trim(), time: now() }
+      await update($, feed, list => [...list, item].slice(-FEED_MAX))
       await update($, diag, d => ({ ...d, last: '成功' }))
     } else {
       const why = r.isAnswered ? 'Haiku 回了空字串' : r.reason === 'api-error' ? `api-error ${r.status ?? ''}` : r.reason
@@ -86,19 +118,96 @@ async function ask($: EngineInterface) {
   if (unsent && Date.now() - lastAskAt >= MIN_GAP_MS) void ask($)
 }
 
+function sidePrompt(history: Entry[], question: string): string {
+  const narrated = history
+    .filter(e => e.kind === 'narration')
+    .slice(-8)
+    .map(e => `${e.time} ${e.text}`)
+    .join('\n')
+  const chat = history
+    .filter(e => e.kind !== 'narration' && !e.pending)
+    .slice(-8)
+    .map(e => (e.kind === 'question' ? `使用者：${e.text}` : `你：${e.text}`))
+    .join('\n')
+
+  return [
+    `<activity>\n${buffer.trim() || '（目前沒有活動紀錄）'}\n</activity>`,
+    `<narration>\n${narrated || '（還沒有旁白）'}\n</narration>`,
+    chat === '' ? '' : `<chat>\n${chat}\n</chat>`,
+    `使用者的新問題：${question}`,
+  ]
+    .filter(s => s !== '')
+    .join('\n\n')
+}
+
+async function sideAsk($: EngineInterface, question: string) {
+  const model = currentModel
+  const qid = nextId++
+  const aid = nextId++
+  let history: Entry[] = []
+  await update($, feed, list => {
+    history = list
+    return [
+      ...list,
+      { id: qid, kind: 'question', text: question, time: now() } satisfies Entry,
+      { id: aid, kind: 'answer', text: '', time: now(), model, pending: true } satisfies Entry,
+    ].slice(-FEED_MAX)
+  })
+
+  let text: string
+  const stop = new AbortController()
+  sideStops.add(stop)
+  try {
+    const r =
+      model === 'main'
+        ? await $.model.fork({ prompt: `${FORK_NOTE}\n\n${question}` })
+        : await $.model.complete(
+            { model, system: SIDE_SYSTEM, prompt: sidePrompt(history, question), maxTokens: 1000, timeoutMs: 90000 },
+            { signal: stop.signal },
+          )
+    if (r.isAnswered && r.text.trim() !== '') text = r.text.trim()
+    else if (r.isAnswered) text = '（模型回了空白）'
+    else if (r.reason === 'nothing-to-fork') text = '（主對話還沒有任何內容可以帶入，先換別的模型問。）'
+    else if (r.reason === 'api-error') text = `（呼叫失敗：api-error ${r.status ?? ''}）`
+    else text = `（沒有回答：${r.reason}）`
+  } catch (err) {
+    text = `（呼叫失敗：${String(err)}）`
+  } finally {
+    sideStops.delete(stop)
+  }
+  if (stop.signal.aborted) return
+  await update($, feed, list => list.map(e => (e.id === aid ? { ...e, text, pending: false } : e)))
+}
+
+async function saveModel($: EngineInterface, value: string) {
+  try {
+    await $.store.set(STORE_MODEL, value)
+  } catch {
+    // 沒有 store（例如測試環境）就只記在這個 session
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'narrator',
       description: '打開「Claude 在做什麼」面板',
     })
-    void $.ui.open({ id: PANE, title: 'Claude 在做什麼' })
+    // 上次選的 side chat 模型跨 session 保留；測試環境沒有 store 就用預設
+    try {
+      const saved = await $.store.get(STORE_MODEL)
+      if (typeof saved === 'string' && MODELS.some(m => m.value === saved)) currentModel = saved
+    } catch {
+      // 沒有 store 時維持預設
+    }
+    await update($, chatModel, () => currentModel)
+    void $.ui.open({ id: PANE, title: TITLE })
 
     return next(e)
   })
 
   on('command.run', { command: 'narrator' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Claude 在做什麼' })
+    await $.ui.open({ id: PANE, title: TITLE })
 
     return { text: '「Claude 在做什麼」面板已開啟。' }
   })
@@ -107,6 +216,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       buffer = ''
       unsent = false
+      void update($, isThinking, () => true)
     }
 
     return next(e)
@@ -116,23 +226,14 @@ export const register: Register = on => {
     // 只旁白主對話；subagent 與其他 step 原樣放行
     if (e.agentId !== undefined) return yield* next(e)
 
-    let sawThinking = false
     let thinkingChars = 0
     let textChars = 0
     const tools = new Map<number, { name: string; json: string }>()
     for await (const chunk of next(e)) {
-      if (chunk.kind === 'thinking' && chunk.text !== '') {
-        if (!sawThinking) {
-          sawThinking = true
-          void update($, isThinking, () => true)
-        }
-        thinkingChars += chunk.text.length
-        buffer = clip(buffer + chunk.text, BUFFER_CHARS)
-        unsent = true
-        if (Date.now() - lastAskAt >= MIN_GAP_MS) void ask($)
-      } else if (chunk.kind === 'text' && chunk.text !== '') {
-        // 思考內容拿不到時（例如被省略），改用 Claude 寫出來的文字旁白
-        textChars += chunk.text.length
+      if ((chunk.kind === 'thinking' || chunk.kind === 'text') && chunk.text !== '') {
+        // 思考內容常被省略（chunk 為空），這時改用 Claude 寫出來的文字旁白
+        if (chunk.kind === 'thinking') thinkingChars += chunk.text.length
+        else textChars += chunk.text.length
         buffer = clip(buffer + chunk.text, BUFFER_CHARS)
         unsent = true
         if (Date.now() - lastAskAt >= MIN_GAP_MS) void ask($)
@@ -167,38 +268,106 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const list = await read($, narrations)
+    const el = $.ui.resolve(e)
+    const { Box, Button, Text, Markdown } = el
+    const list = await read($, feed)
     const thinking = await read($, isThinking)
     const d = await read($, diag)
-    const room = Math.max(1, Math.floor(((e.viewport?.rows ?? 24) - 5) / 3))
-    const shown = list.slice(-room).reverse()
+    const model = await read($, chatModel)
+    const text = await read($, draft)
+    const canAsk = e.surface !== 'mobile'
+
+    // 時間軸用固定數量的格子，只換內容：終端機 pane 的樹結構一變就會失去鍵盤，打字打到一半會被打斷
+    const fixed = canAsk ? 10 : 6
+    const slots = Math.max(2, Math.floor(((e.viewport?.rows ?? 30) - fixed) / 3))
+    const shown = list.slice(-slots)
+    const lastNarration = shown.reduce((at, n, i) => (n.kind === 'narration' ? i : at), -1)
+    const rows = Array.from({ length: slots }, (_, i) => shown[i - (slots - shown.length)])
+
+    const header = (n: Entry | undefined) =>
+      n === undefined
+        ? ' '
+        : n.kind === 'narration'
+          ? n.time
+          : n.kind === 'question'
+            ? `你・${n.time}`
+            : n.pending
+              ? `${modelName(n.model ?? '')} 回答中…`
+              : `${modelName(n.model ?? '')} 回答`
+
+    const send = (value: string) => {
+      const q = value.trim()
+      void update($, draft, () => '')
+      if (q !== '') void sideAsk($, q)
+    }
 
     return (
       <Box flexDirection="column" gap={1}>
-        {/* 固定節點：只換文字，避免 terminal pane 因結構改變而失去鍵盤 */}
-        <Box flexDirection="row" gap={2}>
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text dimColor={!thinking}>{thinking ? '● Claude 工作中…' : '○ 閒置'}</Text>
           <Button
             key="narrator-clear"
             dimColor
             onPress={() => {
-              void update($, narrations, () => [])
+              for (const s of sideStops) s.abort()
+              sideStops = new Set()
+              void update($, feed, () => [])
               void update($, diag, () => EMPTY_DIAG)
             }}
           >
             清除
           </Button>
-          <Text dimColor>{thinking ? 'Claude 思考中…' : ' '}</Text>
         </Box>
-        {shown.length === 0 && <Text dimColor>Claude 開始思考後，這裡會用白話說明它在做什麼。</Text>}
-        {shown.map((n, i) => (
-          <Box key={String(n.id)} flexDirection="column">
-            <Text dimColor>{n.time}</Text>
-            <Text dimColor={i > 0}>{n.text}</Text>
+
+        <Box key="narrator-feed" flexDirection="column" gap={1}>
+          {list.length === 0 && (
+            <Text dimColor>Claude 開始工作後，這裡會用白話說明它在做什麼；也可以在下面直接問。</Text>
+          )}
+          {rows.map((n, i) => (
+            <Box
+              key={`narrator-slot-${i}`}
+              flexDirection="column"
+              paddingLeft={n !== undefined && n.kind !== 'narration' ? 2 : 0}
+            >
+              <Text dimColor={n?.kind !== 'question'} bold={n?.kind === 'answer'}>
+                {header(n)}
+              </Text>
+              <Markdown
+                text={n === undefined || n.text === '' ? ' ' : n.text}
+                dimColor={n?.kind === 'narration' && shown.indexOf(n) !== lastNarration}
+              />
+            </Box>
+          ))}
+        </Box>
+
+        {canAsk && 'Select' in el && 'Input' in el && (
+          <Box key="narrator-ask" flexDirection="column" gap={1}>
+            <el.Select
+              key="narrator-model"
+              label="模型"
+              value={model}
+              options={MODELS.map(m => ({ value: m.value, label: m.label }))}
+              onSelect={value => {
+                currentModel = value
+                void update($, chatModel, () => value)
+                void saveModel($, value)
+              }}
+            />
+            <el.Input
+              key="narrator-question"
+              rows={2}
+              value={text}
+              placeholder="問問旁白：它現在在幹嘛？為什麼？"
+              submitLabel="送出"
+              onInput={value => void update($, draft, () => value)}
+              onSubmit={send}
+            />
           </Box>
-        ))}
+        )}
+        {!canAsk && <Text dimColor>在桌面版或終端機的這個面板可以直接提問。</Text>}
+
         <Text dimColor>
-          診斷：step {d.steps}・思考 {d.thinkingChars} 字・文字 {d.textChars} 字・詢問 {d.asks} 次・{d.last}
+          step {d.steps}・詢問 {d.asks} 次・{d.last}
         </Text>
       </Box>
     )

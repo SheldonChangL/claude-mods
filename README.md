@@ -6,7 +6,7 @@ Mods for Claude Code (CLI and the Desktop app's Code tab), each in its own folde
 |---|---|
 | [pillbar](mods/pillbar) | A capsule band above the prompt: the 5-hour and weekly plan usage, this session's context window, and the machine's CPU, memory and disk. |
 | [clawd-run](mods/clawd-run) | While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt, with the turn's tokens and cost. |
-| [plain-narrator](mods/plain-narrator) | A pane where Haiku explains, in plain language, what Claude is planning right now. |
+| [plain-narrator](mods/plain-narrator) | A pane where Haiku explains, in plain language, what Claude is doing, with a side chat you can ask using the model you pick (Haiku, Sonnet, Opus, Fable, or the main conversation itself). |
 
 pillbar and clawd-run share the band above the prompt and stack instead of replacing each other.
 

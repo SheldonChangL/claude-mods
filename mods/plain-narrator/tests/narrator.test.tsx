@@ -44,7 +44,7 @@ test('thinking is narrated by haiku into the pane, on every surface', async ($, 
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    const row = await ui.find({ type: 'Text', text: /旁白面板/ })
+    const row = await ui.find({ type: 'Markdown', text: /旁白面板/ })
     expect(row?.text).toBe('Claude 正在研究要怎麼加旁白面板。')
     await ui.unmount()
   }
@@ -104,11 +104,76 @@ test('the clear button empties the pane', async ($, on) => {
   }
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  for (let i = 0; i < 20 && !(await ui.find({ type: 'Text', text: /整理檔案/ })); i++) await Promise.resolve()
-  expect((await ui.find({ type: 'Text', text: /整理檔案/ }))?.text).toBe('Claude 在整理檔案。')
+  for (let i = 0; i < 20 && !(await ui.find({ type: 'Markdown', text: /整理檔案/ })); i++) await Promise.resolve()
+  expect((await ui.find({ type: 'Markdown', text: /整理檔案/ }))?.text).toBe('Claude 在整理檔案。')
 
   await ui.press({ key: 'narrator-clear' })
-  for (let i = 0; i < 20 && (await ui.find({ type: 'Text', text: /整理檔案/ })); i++) await Promise.resolve()
-  expect(await ui.find({ type: 'Text', text: /整理檔案/ })).toBeUndefined()
+  for (let i = 0; i < 20 && (await ui.find({ type: 'Markdown', text: /整理檔案/ })); i++) await Promise.resolve()
+  expect(await ui.find({ type: 'Markdown', text: /整理檔案/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+const USAGE = { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
+
+test('a side question goes to the model picked in the pane and its answer lands in the feed', async ($, on) => {
+  const calls: { model: string; prompt: string }[] = []
+  on('command.register', () => ({ value: { command: 'narrator' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('model.complete', (_, e) => {
+    calls.push({ model: e.model, prompt: e.prompt })
+    return { value: { isAnswered: true, text: '它先備份是怕改壞設定。', usage: USAGE } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    calls.length = 0
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.select({ key: 'narrator-model', value: 'sonnet' })
+    await ui.input({ key: 'narrator-question', text: '為什麼要先備份？' })
+    for (let i = 0; i < 40 && !(await ui.find({ type: 'Markdown', text: /怕改壞/ })); i++) await Promise.resolve()
+
+    expect(calls[0]?.model).toBe('sonnet')
+    expect(calls[0]?.prompt).toContain('為什麼要先備份？')
+    expect((await ui.find({ type: 'Markdown', text: /為什麼要先備份/ }))?.text).toBe('為什麼要先備份？')
+    expect((await ui.find({ type: 'Text', text: /Sonnet 回答/ }))?.text).toBe('Sonnet 回答')
+    await ui.press({ key: 'narrator-clear' })
+    await ui.unmount()
+  }
+})
+
+test('the main-conversation option forks the session instead of a fresh completion', async ($, on) => {
+  const forked: string[] = []
+  on('command.register', () => ({ value: { command: 'narrator' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('model.complete', () => {
+    throw new Error('main should not use model.complete')
+  })
+  on('model.fork', (_, e) => {
+    forked.push(e.prompt)
+    return { value: { isAnswered: true, text: '它在改全域設定檔。', usage: USAGE } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.select({ key: 'narrator-model', value: 'main' })
+  await ui.input({ key: 'narrator-question', text: '它在改哪個檔？' })
+  for (let i = 0; i < 40 && !(await ui.find({ type: 'Markdown', text: /全域設定/ })); i++) await Promise.resolve()
+
+  expect(forked[0]).toContain('它在改哪個檔？')
+  expect((await ui.find({ type: 'Text', text: /主對話 回答/ }))?.text).toBe('主對話 回答')
+  await ui.unmount()
+})
+
+test('mobile has no field, so the pane says where to ask instead', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'narrator' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'mobile', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'mobile' })
+  expect(await ui.find({ key: 'narrator-question' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /可以直接提問/ })).toBeDefined()
   await ui.unmount()
 })
