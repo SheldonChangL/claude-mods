@@ -84,23 +84,29 @@ export const register: Register = (on, options) => {
       return next(e)
     }
 
-    const { Client } = $.ui.resolve(e)
+    const { Box, Client } = $.ui.resolve(e)
+    // Another plugin's band (a meter row) may sit beneath: keep it under the
+    // game, by the prompt, rather than drawing in its place.
+    const below = await next(e)
 
     return (
-      <Client
-        key="clawd-run"
-        module="./game.tsx"
-        props={{
-          rows,
-          columns: e.props.bodyColumns,
-          isWorking: e.props.isWorking,
-          surface: e.surface,
-          tokens: used.tokens,
-          usd: used.usd,
-        }}
-        height={rows}
-        width="100%"
-      />
+      <Box key="clawd-run-stack" flexDirection="column">
+        <Client
+          key="clawd-run"
+          module="./game.tsx"
+          props={{
+            rows,
+            columns: e.props.bodyColumns,
+            isWorking: e.props.isWorking,
+            surface: e.surface,
+            tokens: used.tokens,
+            usd: used.usd,
+          }}
+          height={rows}
+          width="100%"
+        />
+        {below}
+      </Box>
     )
   })
 }

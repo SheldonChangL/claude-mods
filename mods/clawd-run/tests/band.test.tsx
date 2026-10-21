@@ -38,6 +38,8 @@ test('Clawd plays only once a turn has run long, and stops with it', async ($, o
     await clock.advance(2_000)
     await ui.redraw()
     expect(await ui.find({ type: 'Text', text: /tokens/, in: 'clawd-run' })).toBeDefined()
+    // The band beneath (another plugin's meter row) still draws, under the game.
+    expect(await ui.find({ type: 'Text', text: /engine/ })).toBeDefined()
     await ui.resize({ columns: 80, rows: 11 })
     await ui.advance(5_000)
     const hud = await ui.find({ type: 'Text', text: /tokens/, in: 'clawd-run' })
