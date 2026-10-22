@@ -85,8 +85,6 @@ export type Settings = {
   showBand: boolean
   /** The words' language: follow Claude, or pinned. */
   language: 'auto' | 'zh' | 'en'
-  /** Experiment: how the Desktop is handed the tank (image, interactive frame, or a tiny test drawing). */
-  renderMode: 'image' | 'frame' | 'tiny'
 }
 
 export type Stats = {
