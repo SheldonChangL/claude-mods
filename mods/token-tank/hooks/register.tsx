@@ -276,8 +276,18 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
   // every few seconds). The same drawing is handed back while nothing of the
   // tank changed, so the Desktop keeps the image and its animation running
   // instead of swapping (and flashing) it.
-  const live = s.fish.some(f => (f.state === 'spitCoin' && d.now - f.since < 15000) || (f.state === 'startled' && d.now - f.since < 1100)) || s.pellets.some(p => d.now - p.at < PELLET_SHOW_MS)
-  const key = [s.revision, W, widthPx, heightPx, selected ?? '', s.settings.theme, s.settings.showCoins, s.settings.showBubbles, s.settings.reduceMotion, live, s.fish.map(f => `${f.id}:${f.state}:${f.hunger < 25}`).join(',')].join('|')
+  // Only what the drawing shows goes into the key: a turn that changed the
+  // coins or the stats alone must not make a new image (and a flash).
+  const fishKey = s.fish
+    .map(f => {
+      const spitting = f.state === 'spitCoin' && d.now - f.since < 15000
+      const startled = f.state === 'startled' && d.now - f.since < 1100
+      return `${f.id}:${f.species}:${f.name}:${f.hunger < 25 ? 'h' : ''}:${f.pending}:${spitting ? 's' : ''}${startled ? 'd' : ''}`
+    })
+    .join(',')
+  const decorKey = s.decorations.map(x => `${x.kind}@${x.x}`).join(',')
+  const pelletKey = s.pellets.filter(p => d.now - p.at < PELLET_SHOW_MS).map(p => p.id).join(',')
+  const key = [W, widthPx, heightPx, selected ?? '', s.settings.theme, s.settings.showCoins, s.settings.showBubbles, s.settings.reduceMotion, s.settings.tankSize, fishKey, decorKey, pelletKey].join('|')
   let drawing = tankCache
   if (!drawing || drawing.key !== key) {
     drawing = {
