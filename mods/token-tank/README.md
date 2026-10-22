@@ -2,6 +2,8 @@
 
 ![The tank above the prompt while Claude works, pillbar beneath it](docs/images/band-en.png)
 
+[![Buy the fish some food on Ko-fi](https://img.shields.io/badge/Ko--fi-buy%20the%20fish%20some%20food-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/sheldonchang)
+
 A pixel-art aquarium that lives in a Claude Code pane. Claude's work feeds the
 fish: every turn's token usage becomes energy, the fish turn energy into coins,
 and successful edits, passing tests and git commits pay a little extra. You
@@ -73,3 +75,7 @@ node assets/tools/build-sprites.mjs   # assets/sprites.json → render/sprites.t
 ```
 
 MIT licensed. All pixel art is original.
+
+## Support
+
+If the fish made you smile, you can buy them some food: [ko-fi.com/sheldonchang](https://ko-fi.com/sheldonchang). The mod stays free and open either way.

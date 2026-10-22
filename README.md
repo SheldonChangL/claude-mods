@@ -48,3 +48,9 @@ Each mod is self-contained. From a mod's folder:
 claude plugin test .
 claude plugin validate .
 ```
+
+## Support
+
+[![Buy the fish some food on Ko-fi](https://img.shields.io/badge/Ko--fi-buy%20the%20fish%20some%20food-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/sheldonchang)
+
+These mods are free and open source. If one of them made your day a little better, a coffee on [Ko-fi](https://ko-fi.com/sheldonchang) is appreciated and never expected.
