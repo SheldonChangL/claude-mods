@@ -47,8 +47,10 @@ function symbols(name: string, anim: string): string {
   if (!sprite) return ''
   const frames = sprite.frames[anim] ?? sprite.frames[Object.keys(sprite.frames)[0] ?? '']
   if (!frames) return ''
+  const pngs = sprite.png?.[anim] ?? sprite.png?.[Object.keys(sprite.png ?? {})[0] ?? ''] ?? []
+  // A frame is one small PNG (a few hundred bytes) rather than hundreds of path runs.
   return frames
-    .map((f, i) => `<symbol id="${name}-${anim}-${i}" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${sprite.w}" height="${sprite.h}">${framePaths(f)}</symbol>`)
+    .map((f, i) => `<symbol id="${name}-${anim}-${i}" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${sprite.w}" height="${sprite.h}">${pngs[i] ? `<image href="${pngs[i]}" width="${sprite.w}" height="${sprite.h}" style="image-rendering:pixelated"/>` : framePaths(f)}</symbol>`)
     .join('')
 }
 
@@ -322,7 +324,7 @@ function rays(theme: Theme, o: TankOptions): string {
 function sand(theme: Theme): string {
   const t = THEMES[theme]
   let dots = ''
-  const count = Math.round((26 * W) / BASE_W)
+  const count = Math.round((10 * W) / BASE_W)
   for (let i = 0; i < count; i++) {
     const x = hash01('sand' + i, 14) * W
     const y = FLOOR_Y + 4 + hash01('sand' + i, 15) * 22
