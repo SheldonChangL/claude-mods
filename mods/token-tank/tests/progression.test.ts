@@ -4,7 +4,7 @@ import { applyTurn } from '../game/economy'
 import { ECONOMY } from '../game/economy.config'
 import { collect, newFish, releaseFish } from '../game/fish'
 import { baseSlots, MAX_TANK_LEVEL, nextSlot, slotCapacity, tankLevel, tankLevelFor, tankProgress } from '../game/progression'
-import { buyFish, buySlot, isUnlocked, shopList } from '../game/shop'
+import { buyFish, buySlot, isUnlocked, moveDecoration, shopList } from '../game/shop'
 import { SPECIES, SPECIES_LIST } from '../game/species'
 import { migrate, newGame } from '../game/state'
 import type { Fish, GameState, Rarity, SpeciesId } from '../game/types'
@@ -210,4 +210,20 @@ test('a migration that throws reports failure instead of handing back a game to 
   expect(v2.economyMigrated).toBe(true)
   expect(v2.state.economyVersion).toBe(3)
   expect(v2.state.fish[0]!.dailyKey.length).toBe(10)
+})
+
+
+test('a decoration moves where it is put, clamped to the water, and the save keeps the spot', () => {
+  const s = newGame(T0)
+  const id = s.decorations[0]!.id
+  const moved = moveDecoration(s, id, 200, 120)
+  expect(moved.events[0]).toMatchObject({ kind: 'moved', id, x: 200, y: 120 })
+  expect(moved.state.decorations.find(d => d.id === id)).toMatchObject({ x: 200, y: 120 })
+  const clamped = moveDecoration(s, id, -50, 999).state.decorations.find(d => d.id === id)!
+  expect(clamped.x).toBe(8)
+  expect(clamped.y).toBe(150)
+  expect(moveDecoration(s, 'nope', 1, 1).events[0]).toMatchObject({ kind: 'refused', reason: 'unknown-decor' })
+  expect(moveDecoration(s, id, Number.NaN, 1).events[0]).toMatchObject({ kind: 'refused', reason: 'bad-position' })
+  const same = moveDecoration(moved.state, id, 200, 120)
+  expect(same.state).toBe(moved.state)
 })

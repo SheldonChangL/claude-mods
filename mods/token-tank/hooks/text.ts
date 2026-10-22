@@ -22,6 +22,12 @@ export const S = {
   tabShop: { zh: '🛒 商店', en: '🛒 Shop' },
   tabFish: { zh: '🐟 魚', en: '🐟 Fish' },
   tabSettings: { zh: '⚙ 設定', en: '⚙ Settings' },
+  tabDecor: { zh: '🪸 裝飾', en: '🪸 Decor' },
+  move: { zh: '↔ 移動', en: '↔ Move' },
+  moving: { zh: '點魚缸任一處放置{name}', en: 'Tap the tank to place {name}' },
+  cancelMove: { zh: '取消', en: 'Cancel' },
+  noDecor: { zh: '魚缸裡還沒有裝飾，到商店買一些。', en: 'No decorations yet; the shop has some.' },
+  decorAt: { zh: '位置 {x}, {y}', en: 'at {x}, {y}' },
   shopFish: { zh: '魚種', en: 'Fish' },
   shopDecor: { zh: '裝飾', en: 'Decor' },
   shopFood: { zh: '飼料', en: 'Food' },
@@ -137,6 +143,11 @@ export function describe(state: GameState, e: GameEvent, lang: Lang): string | n
     }
     case 'startled':
       return null
+    case 'moved': {
+      const kind = state.decorations.find(d => d.id === e.id)?.kind
+      const name = kind ? decorName(kind, lang) : tr(lang, 'decorWord')
+      return zh ? `你把${name}移到了新位置。` : `You moved ${name}.`
+    }
     case 'fed':
       if (e.fishId) return zh ? `你餵了${fishName(state, e.fishId, lang)}。` : `You fed ${fishName(state, e.fishId, lang)}.`
       return zh ? `你餵了 ${e.count} 條魚。` : `You fed ${e.count} fish.`
@@ -197,6 +208,7 @@ const REFUSALS: Record<string, Pair> = {
   'unknown-decor': { zh: '沒有這種裝飾。', en: 'No such decoration.' },
   'unknown-reward': { zh: '沒有這種獎勵。', en: 'No such reward.' },
   'bad-count': { zh: '數量不對。', en: 'Bad count.' },
+  'bad-position': { zh: '位置不對。', en: 'Bad position.' },
   'all-full': { zh: '魚都吃飽了，飼料留著。', en: 'The fish are all full; the food is kept.' },
 }
 

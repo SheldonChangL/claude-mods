@@ -285,7 +285,8 @@ function decorMarkup(d: Decoration, o: TankOptions): string {
   const anim = decorAnim(d.kind)
   // Decorations are placed on the base width; they spread over a wider tank.
   const x = Math.max(0, Math.min(W - sprite.w, (d.x * W) / BASE_W - sprite.w / 2))
-  const y = d.y - sprite.h + 4
+  // `y` is the baseline the sprite stands on (the sand at 150, or higher up the water).
+  const y = Math.max(0, Math.min(FLOOR_Y, d.y)) - sprite.h + 4
   const dur = 1.2 + hash01(d.id, 8) * 0.8
   return animatedUse(d.kind, anim, dur, x, y, o.isMotion)
 }

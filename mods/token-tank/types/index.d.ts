@@ -76,7 +76,7 @@ export type DecorId = 'seaweed' | 'coral' | 'rock' | 'chest' | 'ruin' | 'anchor'
 export type Decoration = {
   id: string
   kind: DecorId
-  /** Design coordinates (320 × 180), bottom-left anchor. */
+  /** Design coordinates on the 320 × 180 base: `x` the centre, `y` the baseline the sprite stands on. */
   x: number
   y: number
 }
@@ -167,6 +167,7 @@ export type GameEvent =
   | { kind: 'dropped'; x: number; y: number; eaters: string[] }
   | { kind: 'startled'; fishId: string }
   | { kind: 'bought'; what: 'fish' | 'decor' | 'food' | 'slot'; id: string; price: number }
+  | { kind: 'moved'; id: string; x: number; y: number }
   | { kind: 'levelUp'; fishId: string; level: number }
   | { kind: 'renamed'; fishId: string; name: string }
   | { kind: 'reward'; reward: RewardKind; coins: number }
@@ -175,7 +176,7 @@ export type GameEvent =
 
 export type Outcome = { state: GameState; events: GameEvent[] }
 
-export type View = 'shop' | 'fish' | 'settings'
+export type View = 'shop' | 'fish' | 'decor' | 'settings'
 export type ShopTab = 'fish' | 'decor' | 'food'
 
 declare module 'claude-code' {
@@ -197,6 +198,8 @@ declare module 'claude-code' {
       lang: 'zh' | 'en'
       /** The fish whose release awaits a second press. */
       confirmRelease: string | null
+      /** The decoration the next tap on the tank places. */
+      movingDecor: string | null
     }
   }
 }

@@ -100,6 +100,22 @@ export function buyDecoration(state: GameState, kind: DecorId, now: number, idSe
   return { state: next, events: [{ kind: 'bought', what: 'decor', id: decor.id, price }] }
 }
 
+/** Bounds a decoration's baseline: never below the sand, never above the middle of the water. */
+export const DECOR_Y_MIN = 60
+export const DECOR_Y_MAX = FLOOR_Y
+
+/** Moves a decoration to design coordinates on the 320 × 180 base (clamped); the spot is kept in the save. */
+export function moveDecoration(state: GameState, id: string, x: number, y: number): Outcome {
+  const target = state.decorations.find((d) => d.id === id)
+  if (!target) return refuse(state, 'unknown-decor')
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return refuse(state, 'bad-position')
+  const nx = Math.round(Math.max(8, Math.min(312, x)))
+  const ny = Math.round(Math.max(DECOR_Y_MIN, Math.min(DECOR_Y_MAX, y)))
+  if (nx === target.x && ny === target.y) return { state, events: [] }
+  const decorations = state.decorations.map((d) => (d.id === id ? { ...d, x: nx, y: ny } : d))
+  return { state: bump(state, { decorations }), events: [{ kind: 'moved', id, x: nx, y: ny }] }
+}
+
 export function buyFood(state: GameState, count: number): Outcome {
   if (!Number.isInteger(count) || count < 1 || count > MAX_FOOD_BUY) return refuse(state, 'bad-count')
   const price = count * FOOD_PRICE

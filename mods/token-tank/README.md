@@ -24,6 +24,8 @@ The words follow Claude's language: Chinese when Claude Code's `language` settin
   `/fish feed` feeds every fish without opening it.
 - In the pane: pick a fish by name to see its card (hunger, mood, XP), then
   feed, collect, rename or level it up. 收全部 / 餵全部 act on the whole tank.
+- 裝飾 lists the decorations in the tank: press 移動 on one, then tap the tank
+  where it should stand; the spot is kept in the save.
 - 商店 sells fish (more unlock as the tank grows), decorations and food. 魚冊
   is the species you have owned, 統計 the token and coin figures, 設定 the
   theme and the animation switches (turn on 簡化動畫 on a slow machine).

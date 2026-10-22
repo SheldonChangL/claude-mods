@@ -17,9 +17,9 @@ import { applyTurn, effectiveTokens, isOverQuota, levelBoost, levelUpCost, PENDI
 import { nextSlot, slotCapacity, tankProgress } from '../game/progression'
 import { collect, dropFood, feed, FULL_ENOUGH, levelUp, pendingTotal, releaseFish, rename, startle } from '../game/fish'
 import { DECOR, FOOD_PRICE, SPECIES, SPECIES_LIST } from '../game/species'
-import { buyDecoration, buyFish, buyFood, buySlot, MAX_DECOR, shopList } from '../game/shop'
+import { buyDecoration, buyFish, buyFood, buySlot, MAX_DECOR, moveDecoration, shopList } from '../game/shop'
 import { appendLog, mergeStates, migrate } from '../game/state'
-import { decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, FISH_SCALES, laneOrder, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
+import { BASE_W, decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, FISH_SCALES, laneOrder, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
 import { clock, decorName, describe, fmt, langOf, moodLine, refusalText, speciesName, tr } from './text'
 import type { Lang } from './text'
 
@@ -43,6 +43,7 @@ const turn = atom({ plugin: 'token-tank', key: 'turn' } as const, null as { turn
 const isPinned = atom({ plugin: 'token-tank', key: 'isPinned' } as const, false)
 const lang = atom({ plugin: 'token-tank', key: 'lang' } as const, 'zh' as Lang)
 const confirmRelease = atom({ plugin: 'token-tank', key: 'confirmRelease' } as const, null as string | null)
+const movingDecor = atom({ plugin: 'token-tank', key: 'movingDecor' } as const, null as string | null)
 
 // ---------------------------------------------------------------- persistence
 
@@ -207,6 +208,13 @@ async function tapTank($: EngineInterface, X: number, Y: number, W: number, rend
   const state = await read($, game)
   if (!state) return
   const now = await $.clock.now()
+  // A decoration waiting to be placed takes the tap: the spot, on the 320-wide base.
+  const moving = await read($, movingDecor)
+  if (moving) {
+    await commit($, st => moveDecoration(st, moving, (X * BASE_W) / W, Y))
+    await update($, movingDecor, () => null)
+    return
+  }
   const n = state.fish.length
   const hit = laneOrder(state.fish).find((f, i) => {
     const l = fishLayout(f, i, n, W, renderedAt, FISH_SCALES[state.settings.tankSize])
@@ -368,9 +376,10 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
 }
 
 /** The one-line status under the band's tank. */
-function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElement {
+function bandRow($: EngineInterface, d: Draw, note: string | null, movingId: string | null): RenderElement {
   const { Box, Text, Button } = d.el
   const s = d.state
+  const moving = movingId ? s.decorations.find(x => x.id === movingId) ?? null : null
   const pending = pendingTotal(s)
   const hungry = s.fish.filter(f => f.hunger < 25).length
   const last = s.log[s.log.length - 1]
@@ -382,6 +391,8 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
       {note && <Text color="yellow">{note}</Text>}
       {hungry > 0 && <Text color="yellow">{tr(d.lang, 'hungryCount', { n: hungry })}</Text>}
       {s.fish.some(f => isOverQuota(f, d.now)) && <Text dimColor>⏳ {tr(d.lang, 'overQuotaBand')}</Text>}
+      {moving && <Text color="yellow">↔ {tr(d.lang, 'moving', { name: decorName(moving.kind, d.lang) })}</Text>}
+      {moving && link(d, 'band-cancel-move', tr(d.lang, 'cancelMove'), () => void update($, movingDecor, () => null))}
       {hungry > 0 && <Button key="band-feed" plain onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>}
       <Button key="band-open" plain onPress={() => void $.ui.open({ id: PANE, title: 'Token Tank', focus: true })}>{tr(d.lang, 'panel')}</Button>
       {last && <Text dimColor wrap="truncate-end">{last.text}</Text>}
@@ -437,6 +448,7 @@ function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
       <Box flexDirection="row" gap={3} flexWrap="wrap">
         {tab('shop', tr(d.lang, 'tabShop'))}
         {tab('fish', tr(d.lang, 'tabFish'))}
+        {tab('decor', tr(d.lang, 'tabDecor'))}
         {tab('settings', tr(d.lang, 'tabSettings'))}
       </Box>
     </Box>
@@ -688,6 +700,32 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
   )
 }
 
+/** The decorations in the tank: each can be moved by a tap on the tank. */
+function decorView($: EngineInterface, d: Draw, movingId: string | null): RenderElement {
+  const { Box, Text } = d.el
+  const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
+  const s = d.state
+  const showArt = d.surface !== 'terminal' && Svg
+  if (s.decorations.length === 0) return <Text dimColor>{tr(d.lang, 'noDecor')}</Text>
+  const movingKind = s.decorations.find(x => x.id === movingId)?.kind
+  return (
+    <Box flexDirection="column" gap={1}>
+      {s.decorations.map(x => (
+        <Box key={`decor-${x.id}`} flexDirection="row" gap={1} alignItems="center">
+          <Box width={COL_THUMB} alignItems="center">{showArt && Svg ? Svg({ source: decorPortraitSvg(x.kind, 30), alt: decorName(x.kind, d.lang), width: 30, height: 30 }) : <Text>🪸</Text>}</Box>
+          <Box width={COL_NAME}><Text wrap="truncate-end">{decorName(x.kind, d.lang)}</Text></Box>
+          <Text dimColor>{tr(d.lang, 'decorAt', { x: x.x, y: x.y })}</Text>
+          {movingId === x.id
+            ? link(d, `move-cancel-${x.id}`, tr(d.lang, 'cancelMove'), () => void update($, movingDecor, () => null))
+            : link(d, `move-${x.id}`, `${tr(d.lang, 'move')} ›`, () => void update($, movingDecor, () => x.id))}
+        </Box>
+      ))}
+      {movingKind && <Text color="yellow" wrap="wrap">↔ {tr(d.lang, 'moving', { name: decorName(movingKind, d.lang) })}</Text>}
+      <Text dimColor wrap="wrap">{tr(d.lang, 'decorCount', { n: s.decorations.length, max: MAX_DECOR })}</Text>
+    </Box>
+  )
+}
+
 function settingsView($: EngineInterface, d: Draw): RenderElement {
   const { Box, Text } = d.el
   const s = d.state
@@ -845,6 +883,7 @@ export const register: Register = on => {
     const cur = await read($, turn)
     const pinned = await read($, isPinned)
     const note = await read($, notice)
+    const movingId = await read($, movingDecor)
     const isLong = e.props.isWorking && cur?.isLong === true
     const isShown = state?.settings.showBand !== false && (pinned || isLong)
     if (e.props.hasSurvey || !state || !isShown || e.surface === 'mobile' || e.surface === 'vscode') return next(e)
@@ -858,7 +897,7 @@ export const register: Register = on => {
     return (
       <Box key="token-tank-stack" flexDirection="column">
         {tankBlock($, d, ASPECT[state.settings.tankSize], null)}
-        {bandRow($, d, note)}
+        {bandRow($, d, note, movingId)}
         {below}
       </Box>
     )
@@ -868,7 +907,7 @@ export const register: Register = on => {
     const el = $.ui.resolve(e)
     const { Box, Text } = el
     const state = await read($, game)
-    const [current, tab, selected, note, renaming, releasing] = await Promise.all([read($, view), read($, shopTab), read($, selectedId), read($, notice), read($, isRenaming), read($, confirmRelease)])
+    const [current, tab, selected, note, renaming, releasing, movingId] = await Promise.all([read($, view), read($, shopTab), read($, selectedId), read($, notice), read($, isRenaming), read($, confirmRelease), read($, movingDecor)])
     const now = await $.clock.now()
     if (!state) {
       return (
@@ -883,7 +922,7 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={0} paddingX={1} paddingTop={1}>
         {paneHeader($, d, current)}
         {note && <Text color="yellow" wrap="wrap">{note}</Text>}
-        {current === 'shop' ? shopView($, d, tab) : current === 'fish' ? fishView($, d, selected, renaming, releasing) : settingsView($, d)}
+        {current === 'shop' ? shopView($, d, tab) : current === 'fish' ? fishView($, d, selected, renaming, releasing) : current === 'decor' ? decorView($, d, movingId) : settingsView($, d)}
       </Box>
     )
   })
