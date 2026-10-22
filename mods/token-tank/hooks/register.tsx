@@ -349,10 +349,10 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
   // and a row tall each, so a press says roughly where (the Desktop sends no
   // pointer events to a Client, and nothing crosses out of the Svg).
   const taps: RenderElement[] = []
-  for (let r = 0; r < rows - 1; r++) {
+  for (let r = 0; r <= rows; r++) {
     for (let c = 0; c * TAP_W < cols; c++) {
       const X = ((c + 0.5) * TAP_W) / cols * W
-      const Y = ((r + 0.5) / rows) * TANK_H
+      const Y = Math.min(TANK_H - 1, ((r + 0.5) / rows) * TANK_H)
       taps.push(
         <Box key={`tap-${c}-${r}`} position="absolute" left={c * TAP_W} top={r}>
           <Button key={`tap-${c}-${r}`} plain onPress={() => void tapTank($, X, Y, W, renderedAt)}>{TAP_LABEL}</Button>
@@ -700,7 +700,10 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
   )
 }
 
-/** The decorations in the tank: each can be moved by a tap on the tank. */
+/** How far one nudge arrow moves a decoration, in base design pixels. */
+const NUDGE = 8
+
+/** The decorations in the tank: each can be moved by a tap on the tank, or nudged by the arrows. */
 function decorView($: EngineInterface, d: Draw, movingId: string | null): RenderElement {
   const { Box, Text } = d.el
   const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
@@ -718,6 +721,12 @@ function decorView($: EngineInterface, d: Draw, movingId: string | null): Render
           {movingId === x.id
             ? link(d, `move-cancel-${x.id}`, tr(d.lang, 'cancelMove'), () => void update($, movingDecor, () => null))
             : link(d, `move-${x.id}`, `${tr(d.lang, 'move')} ›`, () => void update($, movingDecor, () => x.id))}
+          <Box flexDirection="row" gap={1}>
+            {link(d, `nudge-l-${x.id}`, '◀', () => void commit($, st => moveDecoration(st, x.id, x.x - NUDGE, x.y)))}
+            {link(d, `nudge-r-${x.id}`, '▶', () => void commit($, st => moveDecoration(st, x.id, x.x + NUDGE, x.y)))}
+            {link(d, `nudge-u-${x.id}`, '▲', () => void commit($, st => moveDecoration(st, x.id, x.x, x.y - NUDGE)))}
+            {link(d, `nudge-d-${x.id}`, '▼', () => void commit($, st => moveDecoration(st, x.id, x.x, x.y + NUDGE)))}
+          </Box>
         </Box>
       ))}
       {movingKind && <Text color="yellow" wrap="wrap">↔ {tr(d.lang, 'moving', { name: decorName(movingKind, d.lang) })}</Text>}
