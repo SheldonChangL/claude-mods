@@ -1,1 +1,1 @@
-Created and validated `sprites/oscar.json`.
+Created `sprites/moorishidol.json`; validation passes.

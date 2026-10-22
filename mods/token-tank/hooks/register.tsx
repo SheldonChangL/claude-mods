@@ -341,24 +341,45 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
 }
 
 // ------------------------------------------------------------------ the pane
+//
+// Airy, like the Desktop's own panels: fixed columns that line up, a blank
+// line between rows, plain text links instead of boxed buttons (the pointer
+// shows them), and the chosen tab or option marked with a dot.
+
+/** A link-like button: plain text, dim when it does nothing right now. */
+function link(d: Draw, key: string, label: string, onPress: () => void, isOff = false): RenderElement {
+  const { Button } = d.el
+  return (
+    <Button key={key} plain dimColor={isOff || undefined} onPress={onPress}>
+      {label}
+    </Button>
+  )
+}
+
+/** One choice in a row of options: the chosen one is a dot and bold text, the others links. */
+function choice(d: Draw, key: string, label: string, isChosen: boolean, onPress: () => void): RenderElement {
+  const { Text } = d.el
+  if (isChosen) return <Text weight="semibold">● {label}</Text>
+  return link(d, key, `○ ${label}`, onPress)
+}
 
 function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
-  const { Box, Text, Button } = d.el
+  const { Box, Text } = d.el
   const s = d.state
   const go = (v: View) => () => void update($, view, () => v)
-  const tab = (id: View, label: string) => (
-    <Button key={`nav-${id}`} variant={current === id ? 'primary' : 'secondary'} onPress={go(id)}>{label}</Button>
-  )
+  const tab = (id: View, label: string) => (current === id ? <Text weight="semibold">{label}</Text> : link(d, `nav-${id}`, label, go(id)))
   return (
-    <Box flexDirection="column" gap={0}>
-      <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+    <Box flexDirection="column" gap={1} marginBottom={1}>
+      <Box flexDirection="row" gap={2} flexWrap="wrap" alignItems="center">
         <Text weight="bold" color="claude">{tr(d.lang, 'title')}</Text>
         <Text dimColor>Lv.{tankLevel(s)}</Text>
+      </Box>
+      <Box flexDirection="row" gap={3} flexWrap="wrap">
         <Text color="yellow">🪙 {fmt(s.coins)}</Text>
         <Text dimColor>🍤 {s.food}</Text>
         <Text dimColor>🐟 {s.fish.length}/{MAX_FISH}</Text>
       </Box>
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
+      <Box flexDirection="row" gap={3} flexWrap="wrap">
         {tab('shop', tr(d.lang, 'tabShop'))}
         {tab('fish', tr(d.lang, 'tabFish'))}
         {tab('settings', tr(d.lang, 'tabSettings'))}
@@ -367,25 +388,38 @@ function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
   )
 }
 
+const COL_THUMB = 5
+const COL_NAME = 14
+const COL_PRICE = 9
+
 function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
-  const { Box, Text, Button } = d.el
+  const { Box, Text } = d.el
   const s = d.state
   const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
-  const showArt = d.surface !== 'terminal' && Svg && d.columns >= 36
+  const showArt = d.surface !== 'terminal' && Svg
   const tabs: [ShopTab, string][] = [['fish', tr(d.lang, 'shopFish')], ['decor', tr(d.lang, 'shopDecor')], ['food', tr(d.lang, 'shopFood')]]
+  const price = (n: number, isOff = false) => (
+    <Box width={COL_PRICE}>
+      <Text color={isOff ? undefined : 'yellow'} dimColor={isOff}>🪙 {n}</Text>
+    </Box>
+  )
   let body: RenderElement
   if (tab === 'fish') {
     body = (
-      <Box flexDirection="column" gap={0}>
+      <Box flexDirection="column" gap={1}>
         {shopList(s).map(({ species, isUnlocked, canAfford }) => {
           const sp = SPECIES[species]
           return (
-            <Box key={`shop-${species}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-              {!isUnlocked ? <Text dimColor weight="bold">?</Text> : showArt && Svg ? Svg({ source: fishPortraitSvg(species, 28), alt: speciesName(sp, d.lang), width: 28, height: 21 }) : <Text>🐟</Text>}
-              <Text dimColor={!isUnlocked}>{isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery')}</Text>
-              <Text color="yellow">🪙 {sp.price}</Text>
+            <Box key={`shop-${species}`} flexDirection="row" gap={1} alignItems="center">
+              <Box width={COL_THUMB} alignItems="center">
+                {!isUnlocked ? <Text dimColor>?</Text> : showArt && Svg ? Svg({ source: fishPortraitSvg(species, 30), alt: speciesName(sp, d.lang), width: 30, height: 22 }) : <Text>🐟</Text>}
+              </Box>
+              <Box width={COL_NAME}>
+                <Text dimColor={!isUnlocked} wrap="truncate-end">{isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery')}</Text>
+              </Box>
+              {price(sp.price, !isUnlocked || !canAfford)}
               {isUnlocked ? (
-                <Button key={`buy-${species}`} variant={canAfford ? 'primary' : 'secondary'} dimColor={!canAfford} onPress={() => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined))}>{tr(d.lang, 'buy')}</Button>
+                link(d, `buy-${species}`, `${tr(d.lang, 'buy')} ›`, () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)), !canAfford)
               ) : (
                 <Text dimColor>{tr(d.lang, 'lockedAt', { n: sp.unlockAt })}</Text>
               )}
@@ -395,39 +429,44 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
       </Box>
     )
   } else if (tab === 'decor') {
-    const kinds = Object.keys(DECOR) as DecorId[]
+    const kinds = (Object.keys(DECOR) as DecorId[]).sort((a, b) => DECOR[a].price - DECOR[b].price)
     body = (
-      <Box flexDirection="column" gap={0}>
-        {kinds.map(kind => (
-          <Box key={`shop-${kind}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-            {showArt && Svg ? Svg({ source: decorPortraitSvg(kind, 28), alt: decorName(kind, d.lang), width: 28, height: 28 }) : <Text>🪸</Text>}
-            <Text>{decorName(kind, d.lang)}</Text>
-            <Text color="yellow">🪙 {DECOR[kind].price}</Text>
-            <Text dimColor>{tr(d.lang, 'placed', { n: s.decorations.filter(x => x.kind === kind).length })}</Text>
-            <Button key={`buy-${kind}`} variant={s.coins >= DECOR[kind].price ? 'primary' : 'secondary'} dimColor={s.coins < DECOR[kind].price} onPress={() => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`))}>{tr(d.lang, 'place')}</Button>
-          </Box>
-        ))}
+      <Box flexDirection="column" gap={1}>
+        {kinds.map(kind => {
+          const have = s.decorations.filter(x => x.kind === kind).length
+          const canAfford = s.coins >= DECOR[kind].price
+          return (
+            <Box key={`shop-${kind}`} flexDirection="row" gap={1} alignItems="center">
+              <Box width={COL_THUMB} alignItems="center">{showArt && Svg ? Svg({ source: decorPortraitSvg(kind, 30), alt: decorName(kind, d.lang), width: 30, height: 30 }) : <Text>🪸</Text>}</Box>
+              <Box width={COL_NAME}>
+                <Text wrap="truncate-end">{decorName(kind, d.lang)}{have > 0 ? <Text dimColor> ×{have}</Text> : null}</Text>
+              </Box>
+              {price(DECOR[kind].price, !canAfford)}
+              {link(d, `buy-${kind}`, `${tr(d.lang, 'place')} ›`, () => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`)), !canAfford)}
+            </Box>
+          )
+        })}
         <Text dimColor>{tr(d.lang, 'decorCount', { n: s.decorations.length, max: MAX_DECOR })}</Text>
       </Box>
     )
   } else {
     body = (
-      <Box flexDirection="column" gap={0}>
-        <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-          <Text>{tr(d.lang, 'foodWord')} <Text color="yellow">🪙 {FOOD_PRICE}</Text><Text dimColor>{tr(d.lang, 'foodLine', { n: s.food })}</Text></Text>
-          <Button key="buy-food-1" onPress={() => void commit($, st => buyFood(st, 1))}>{tr(d.lang, 'buyFood1')}</Button>
-          <Button key="buy-food-10" variant="primary" onPress={() => void commit($, st => buyFood(st, 10))}>{tr(d.lang, 'buyFood10')}</Button>
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Box width={COL_THUMB} alignItems="center"><Text>🍤</Text></Box>
+          <Box width={COL_NAME}><Text>{tr(d.lang, 'foodWord')}<Text dimColor> ×{s.food}</Text></Text></Box>
+          {price(FOOD_PRICE)}
+          {link(d, 'buy-food-1', `${tr(d.lang, 'buyFood1')} ›`, () => void commit($, st => buyFood(st, 1)), s.coins < FOOD_PRICE)}
+          {link(d, 'buy-food-10', `${tr(d.lang, 'buyFood10')} ›`, () => void commit($, st => buyFood(st, 10)), s.coins < FOOD_PRICE * 10)}
         </Box>
         <Text dimColor wrap="wrap">{tr(d.lang, 'foodHelp')}</Text>
       </Box>
     )
   }
   return (
-    <Box flexDirection="column" gap={0}>
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {tabs.map(([id, label]) => (
-          <Button key={`tab-${id}`} variant={tab === id ? 'secondary' : undefined} plain={tab === id ? undefined : true} onPress={() => void update($, shopTab, () => id)}>{label}</Button>
-        ))}
+    <Box flexDirection="column" gap={1}>
+      <Box flexDirection="row" gap={3} flexWrap="wrap">
+        {tabs.map(([id, label]) => (tab === id ? <Text weight="semibold">{label}</Text> : link(d, `tab-${id}`, label, () => void update($, shopTab, () => id))))}
       </Box>
       {body}
     </Box>
@@ -435,43 +474,51 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
 }
 
 function fishView($: EngineInterface, d: Draw, selected: string | null, renaming: boolean): RenderElement {
-  const { Box, Text, Button } = d.el
+  const { Box, Text } = d.el
   const Input = (d.el as { Input?: (p: Record<string, unknown>) => RenderElement }).Input
+  const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
   const s = d.state
-  const barW = Math.max(40, Math.min(120, (d.columns - 24) * 6))
+  const showArt = d.surface !== 'terminal' && Svg
+  const barW = Math.max(60, Math.min(160, (d.columns - 16) * 6))
   if (s.fish.length === 0) return <Text dimColor>{tr(d.lang, 'noFishYet')}</Text>
   return (
-    <Box flexDirection="column" gap={0}>
+    <Box flexDirection="column" gap={1}>
       {s.fish.map(f => {
         const sp = SPECIES[f.species]
         const isOpen = f.id === selected
         const nextXp = XP_THRESHOLDS[f.level] ?? null
         const canLevel = nextXp !== null && f.xp >= nextXp && s.coins >= LEVEL_UP_COST(f.level)
+        const xpRatio = nextXp === null ? 1 : (f.xp - (XP_THRESHOLDS[f.level - 1] ?? 0)) / Math.max(1, nextXp - (XP_THRESHOLDS[f.level - 1] ?? 0))
         return (
           <Box key={`fish-${f.id}`} flexDirection="column" gap={0}>
-            <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-              <Button key={`pick-${f.id}`} plain onPress={() => void update($, selectedId, cur => (cur === f.id ? null : f.id))}>{isOpen ? '▾' : '▸'} {f.name}</Button>
-              <Text dimColor>{speciesName(sp, d.lang)} Lv.{f.level}</Text>
-              <Text color={f.hunger < 25 ? 'yellow' : undefined}>🍽 {Math.round(f.hunger)}%</Text>
-              <Text>🙂 {Math.round(f.mood)}%</Text>
+            <Box flexDirection="row" gap={1} alignItems="center">
+              <Box width={COL_THUMB} alignItems="center">{showArt && Svg ? Svg({ source: fishPortraitSvg(f.species, 30), alt: speciesName(sp, d.lang), width: 30, height: 22 }) : <Text>🐟</Text>}</Box>
+              <Box width={COL_NAME}>{link(d, `pick-${f.id}`, `${f.name} ${isOpen ? '▾' : '▸'}`, () => void update($, selectedId, cur => (cur === f.id ? null : f.id)))}</Box>
+              <Text dimColor>Lv.{f.level}</Text>
+              <Text color={f.hunger < 25 ? 'yellow' : undefined} dimColor={f.hunger >= 25}>🍽 {Math.round(f.hunger)}%</Text>
               {f.pending > 0 && <Text color="yellow">🪙 {f.pending}</Text>}
             </Box>
             {isOpen && (
-              <Box flexDirection="column" gap={0} paddingLeft={2}>
+              <Box flexDirection="column" gap={0} paddingLeft={COL_THUMB + 1} marginTop={1}>
+                <Text dimColor>{speciesName(sp, d.lang)} · {tr(d.lang, 'rateLine', { rate: (sp.rate * (1 + 0.15 * (f.level - 1))).toFixed(2), pending: f.pending, cap: PENDING_CAP })}</Text>
                 <Box flexDirection="row" gap={1} alignItems="center">
                   <Text dimColor>XP</Text>
-                  {bar(d, nextXp === null ? 1 : (f.xp - (XP_THRESHOLDS[f.level - 1] ?? 0)) / Math.max(1, nextXp - (XP_THRESHOLDS[f.level - 1] ?? 0)), '#4cc9f0', barW)}
+                  {bar(d, xpRatio, '#4cc9f0', barW)}
                   <Text dimColor>{nextXp === null ? 'MAX' : `${fmt(f.xp)}/${fmt(nextXp)}`}</Text>
                 </Box>
-                <Text dimColor wrap="wrap">{tr(d.lang, 'rateLine', { rate: (sp.rate * (1 + 0.15 * (f.level - 1))).toFixed(2), pending: f.pending, cap: PENDING_CAP })}</Text>
+                <Box flexDirection="row" gap={1} alignItems="center">
+                  <Text dimColor>🙂</Text>
+                  {bar(d, f.mood / 100, '#4cc9f0', barW)}
+                  <Text dimColor>{Math.round(f.mood)}%</Text>
+                </Box>
                 <Text color="pink" wrap="wrap">❤ {moodLine(s, f.id, d.lang)}</Text>
-                <Box flexDirection="row" gap={1} flexWrap="wrap">
-                  <Button key={`feed-${f.id}`} onPress={() => void commit($, (st, now) => feed(st, f.id, now))}>{tr(d.lang, 'feed')}</Button>
-                  <Button key={`level-${f.id}`} variant={canLevel ? 'primary' : 'secondary'} dimColor={!canLevel} onPress={() => void commit($, (st, now) => levelUp(st, f.id, now))}>{tr(d.lang, 'levelUp')}{nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`}</Button>
-                  <Button key={`rename-${f.id}`} onPress={() => void update($, isRenaming, v => !v)}>{tr(d.lang, 'rename')}</Button>
+                <Box flexDirection="row" gap={3} flexWrap="wrap" marginTop={1}>
+                  {link(d, `feed-${f.id}`, `${tr(d.lang, 'feed')} ›`, () => void commit($, (st, now) => feed(st, f.id, now)), s.food <= 0)}
+                  {link(d, `level-${f.id}`, `${tr(d.lang, 'levelUp')}${nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`} ›`, () => void commit($, (st, now) => levelUp(st, f.id, now)), !canLevel)}
+                  {link(d, `rename-${f.id}`, `${tr(d.lang, 'rename')} ›`, () => void update($, isRenaming, v => !v))}
                 </Box>
                 {renaming && Input && (
-                  <Box flexDirection="column">
+                  <Box flexDirection="column" marginTop={1}>
                     {Input({
                       key: `name-${f.id}`,
                       placeholder: tr(d.lang, 'renamePlaceholder'),
@@ -486,60 +533,69 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
           </Box>
         )
       })}
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        <Button key="feed-all" onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>
-      </Box>
+      <Box marginTop={1}>{link(d, 'feed-all', `${tr(d.lang, 'feedAll')} ›`, () => void commit($, (st, now) => feed(st, null, now)), s.food <= 0)}</Box>
     </Box>
   )
 }
 
 function settingsView($: EngineInterface, d: Draw): RenderElement {
-  const { Box, Text, Button } = d.el
+  const { Box, Text } = d.el
   const s = d.state
   const st = s.stats
   const set = (patch: Partial<GameState['settings']>) =>
     void commit($, (state, now) => ({ state: { ...state, settings: { ...state.settings, ...patch }, revision: state.revision + 1, updatedAt: now }, events: [] }))
   const toggle = (key: 'showCoins' | 'showBubbles' | 'reduceMotion' | 'showBand', label: string) => (
-    <Box key={`set-${key}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-      <Button key={`toggle-${key}`} variant={s.settings[key] ? 'primary' : 'secondary'} onPress={() => set({ [key]: !s.settings[key] })}>{s.settings[key] ? tr(d.lang, 'on') : tr(d.lang, 'off')}</Button>
-      <Text>{label}</Text>
+    <Box key={`set-${key}`} flexDirection="row" gap={2} alignItems="center">
+      {link(d, `toggle-${key}`, s.settings[key] ? '● ' + tr(d.lang, 'on') : '○ ' + tr(d.lang, 'off'), () => set({ [key]: !s.settings[key] }))}
+      <Text dimColor={!s.settings[key]}>{label}</Text>
     </Box>
   )
   const themes: [GameState['settings']['theme'], string][] = [['ocean', tr(d.lang, 'themeOcean')], ['wreck', tr(d.lang, 'themeWreck')], ['reef', tr(d.lang, 'themeReef')], ['abyss', tr(d.lang, 'themeAbyss')]]
-  return (
+  const group = (label: string, body: RenderElement) => (
     <Box flexDirection="column" gap={0}>
-      <Text dimColor>{tr(d.lang, 'theme')}</Text>
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {themes.map(([id, label]) => (
-          <Button key={`theme-${id}`} variant={s.settings.theme === id ? 'primary' : 'secondary'} onPress={() => set({ theme: id })}>{label}</Button>
-        ))}
+      <Text dimColor>{label}</Text>
+      {body}
+    </Box>
+  )
+  return (
+    <Box flexDirection="column" gap={1}>
+      {group(tr(d.lang, 'theme'), (
+        <Box flexDirection="row" gap={2} flexWrap="wrap">
+          {themes.map(([id, label]) => choice(d, `theme-${id}`, label, s.settings.theme === id, () => set({ theme: id })))}
+        </Box>
+      ))}
+      {group(tr(d.lang, 'tankHeight'), (
+        <Box flexDirection="row" gap={2} flexWrap="wrap">
+          {(['s', 'm', 'l'] as const).map(size => choice(d, `size-${size}`, tr(d.lang, size === 's' ? 'sizeS' : size === 'm' ? 'sizeM' : 'sizeL'), s.settings.tankSize === size, () => set({ tankSize: size })))}
+        </Box>
+      ))}
+      {group(tr(d.lang, 'language'), (
+        <Box flexDirection="row" gap={2} flexWrap="wrap">
+          {(['auto', 'zh', 'en'] as const).map(l => choice(d, `lang-${l}`, tr(d.lang, l === 'auto' ? 'langAuto' : l === 'zh' ? 'langZh' : 'langEn'), s.settings.language === l, () => set({ language: l })))}
+        </Box>
+      ))}
+      <Box flexDirection="column" gap={0}>
+        {toggle('showBand', tr(d.lang, 'setBand'))}
+        {toggle('showCoins', tr(d.lang, 'setCoins'))}
+        {toggle('showBubbles', tr(d.lang, 'setBubbles'))}
+        {toggle('reduceMotion', tr(d.lang, 'setMotion'))}
       </Box>
-      <Text dimColor>{tr(d.lang, 'tankHeight')}</Text>
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {(['s', 'm', 'l'] as const).map(size => (
-          <Button key={`size-${size}`} variant={s.settings.tankSize === size ? 'primary' : 'secondary'} onPress={() => set({ tankSize: size })}>{tr(d.lang, size === 's' ? 'sizeS' : size === 'm' ? 'sizeM' : 'sizeL')}</Button>
-        ))}
-      </Box>
-      <Text dimColor>{tr(d.lang, 'language')}</Text>
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {(['auto', 'zh', 'en'] as const).map(l => (
-          <Button key={`lang-${l}`} variant={s.settings.language === l ? 'primary' : 'secondary'} onPress={() => set({ language: l })}>{tr(d.lang, l === 'auto' ? 'langAuto' : l === 'zh' ? 'langZh' : 'langEn')}</Button>
-        ))}
-      </Box>
-      {toggle('showBand', tr(d.lang, 'setBand'))}
-      {toggle('showCoins', tr(d.lang, 'setCoins'))}
-      {toggle('showBubbles', tr(d.lang, 'setBubbles'))}
-      {toggle('reduceMotion', tr(d.lang, 'setMotion'))}
       <Text dimColor wrap="wrap">{tr(d.lang, 'help')}</Text>
-      <Text weight="bold">{tr(d.lang, 'stats')}</Text>
-      <Text wrap="wrap">{tr(d.lang, 'statsToday', { t: fmt(st.todayEffectiveTokens), m: fmt(st.todayCoinsMinted), c: fmt(st.todayCoinsCollected), r: fmt(st.todayTurns) })}</Text>
-      <Text dimColor wrap="wrap">{tr(d.lang, 'statsTotal', { t: fmt(st.totalEffectiveTokens), m: fmt(st.totalCoinsMinted), c: fmt(st.totalCoinsCollected) })}</Text>
-      <Text dimColor wrap="wrap">{tr(d.lang, 'statsMore', { tests: fmt(st.testsPassed), commits: fmt(st.commits), edits: fmt(st.edits), feeds: fmt(st.feeds), dex: s.dex.length, all: SPECIES_LIST.length })}</Text>
-      {s.log.length > 0 && <Text weight="bold">{tr(d.lang, 'log')}</Text>}
-      {s.log.slice(-5).reverse().map((e, i) => (
-        <Box key={`log-${i}`} flexDirection="row" gap={1}>
-          <Text dimColor>{clock(e.at)}</Text>
-          <Text wrap="truncate-end">{e.text}</Text>
+      {group(tr(d.lang, 'stats'), (
+        <Box flexDirection="column" gap={0}>
+          <Text wrap="wrap">{tr(d.lang, 'statsToday', { t: fmt(st.todayEffectiveTokens), m: fmt(st.todayCoinsMinted), c: fmt(st.todayCoinsCollected), r: fmt(st.todayTurns) })}</Text>
+          <Text dimColor wrap="wrap">{tr(d.lang, 'statsTotal', { t: fmt(st.totalEffectiveTokens), m: fmt(st.totalCoinsMinted), c: fmt(st.totalCoinsCollected) })}</Text>
+          <Text dimColor wrap="wrap">{tr(d.lang, 'statsMore', { tests: fmt(st.testsPassed), commits: fmt(st.commits), edits: fmt(st.edits), feeds: fmt(st.feeds), dex: s.dex.length, all: SPECIES_LIST.length })}</Text>
+        </Box>
+      ))}
+      {s.log.length > 0 && group(tr(d.lang, 'log'), (
+        <Box flexDirection="column" gap={0}>
+          {s.log.slice(-5).reverse().map((e, i) => (
+            <Box key={`log-${i}`} flexDirection="row" gap={1}>
+              <Text dimColor>{clock(e.at)}</Text>
+              <Text wrap="truncate-end">{e.text}</Text>
+            </Box>
+          ))}
         </Box>
       ))}
     </Box>
@@ -656,7 +712,7 @@ export const register: Register = on => {
     const columns = e.props.bodyColumns || e.viewport?.columns || 60
     const d: Draw = { el, lang: await langNow($, state), surface: e.surface, columns, maxRows: 0, state, now }
     return (
-      <Box flexDirection="column" gap={0} paddingX={1}>
+      <Box flexDirection="column" gap={0} paddingX={1} paddingTop={1}>
         {paneHeader($, d, current)}
         {note && <Text color="yellow" wrap="wrap">{note}</Text>}
         {current === 'shop' ? shopView($, d, tab) : current === 'fish' ? fishView($, d, selected, renaming) : settingsView($, d)}

@@ -161,7 +161,7 @@ test('with a non-Chinese LANG the words are English and the first fish get Engli
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /Token Tank/ })).toBeDefined()
   await ui.press({ key: 'nav-fish' })
-  expect(await ui.find({ type: 'Text', text: /Clownfish Lv\.1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Clownfish/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /Feed all/ })).toBeDefined()
   await ui.unmount()
 })
