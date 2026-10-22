@@ -1,1 +1,1 @@
-Created `sprites/moorishidol.json`; validation passes.
+Created and validated `sprites/swordtail.json`.

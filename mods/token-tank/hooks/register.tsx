@@ -389,8 +389,10 @@ function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
 }
 
 const COL_THUMB = 5
-const COL_NAME = 14
-const COL_PRICE = 9
+const COL_NAME = 11
+const COL_PRICE = 8
+/** Locked species shown in the shop: the next few to unlock; the rest are one line. */
+const LOCKED_SHOWN = 2
 
 function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   const { Box, Text } = d.el
@@ -405,9 +407,13 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   )
   let body: RenderElement
   if (tab === 'fish') {
+    const list = shopList(s)
+    const lockedAll = list.filter(x => !x.isUnlocked)
+    const shown = list.filter(x => x.isUnlocked).concat(lockedAll.slice(0, LOCKED_SHOWN))
+    const hidden = lockedAll.length - Math.min(LOCKED_SHOWN, lockedAll.length)
     body = (
       <Box flexDirection="column" gap={1}>
-        {shopList(s).map(({ species, isUnlocked, canAfford }) => {
+        {shown.map(({ species, isUnlocked, canAfford }) => {
           const sp = SPECIES[species]
           return (
             <Box key={`shop-${species}`} flexDirection="row" gap={1} alignItems="center">
@@ -421,11 +427,12 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
               {isUnlocked ? (
                 link(d, `buy-${species}`, `${tr(d.lang, 'buy')} ›`, () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)), !canAfford)
               ) : (
-                <Text dimColor>{tr(d.lang, 'lockedAt', { n: sp.unlockAt })}</Text>
+                <Text dimColor wrap="truncate-end">{tr(d.lang, 'lockedAt', { n: sp.unlockAt })}</Text>
               )}
             </Box>
           )
         })}
+        {hidden > 0 && <Text dimColor wrap="wrap">{tr(d.lang, 'moreLocked', { n: hidden })}</Text>}
       </Box>
     )
   } else if (tab === 'decor') {
