@@ -75,23 +75,9 @@ function startLocal() {
 
 // ---- The JetDeck daemon -----------------------------------------------------
 
-/** The plugin folders the session loads (the env, else ~/.claude/settings.json's env block). */
-function pluginDirs() {
-  let list = process.env.CLAUDE_CODE_PLUGIN_DIRS
-  if (!list) {
-    try {
-      list = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8'))?.env?.CLAUDE_CODE_PLUGIN_DIRS
-    } catch {}
-  }
-  return String(list ?? '')
-    .split(path.delimiter)
-    .filter(Boolean)
-    .map((d) => d.replace(/^~(?=$|\/)/, os.homedir()))
-}
-
-/** JetDeck's folder: PILLBAR_JETDECK_DIR, else the plugin folder named jetdeck that has a tap. */
+/** JetDeck's folder, only where PILLBAR_JETDECK_DIR names it: nothing is searched for and run by name. */
 function findJetdeck() {
-  const candidates = [process.env.PILLBAR_JETDECK_DIR, ...pluginDirs()].filter(Boolean)
+  const candidates = [process.env.PILLBAR_JETDECK_DIR].filter(Boolean).map((d) => d.replace(/^~(?=$|\/)/, os.homedir()))
   for (const dir of candidates) {
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.claude-plugin', 'plugin.json'), 'utf8'))

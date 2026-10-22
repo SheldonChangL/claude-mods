@@ -1,1 +1,0 @@
-Created `sprites/wheel.json`; validation passes.

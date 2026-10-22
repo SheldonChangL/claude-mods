@@ -2,5 +2,9 @@
   "name": "plain-narrator",
   "version": "0.2.0",
   "description": "A narrator pane that explains in plain language what Claude is doing, with a side chat you can ask using the model you pick",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Sheldon Chang"
+  },
+  "license": "MIT"
 }

@@ -48,6 +48,30 @@ async function rememberWindows($: EngineInterface, fresh: readonly Window[]) {
   if (fresh.length > 0) await $.store.set(STORE_WINDOWS, merged)
 }
 
+/** `node` on PATH, then the newest nvm node, then Homebrew's and /usr/local's. */
+async function nodeCandidates($: EngineInterface): Promise<string[]> {
+  const found = ['node']
+  let home = ''
+  try {
+    home = (await $.env.get('HOME')) ?? ''
+  } catch {
+    // no environment here
+  }
+  if (home) {
+    try {
+      const versions = (await $.fs.list(`${home}/.nvm/versions/node`))
+        .filter(e => e.kind === 'dir' && /^v\d+/.test(e.name))
+        .map(e => e.name)
+        .sort((a, b) => Number(b.slice(1).split('.')[0]) - Number(a.slice(1).split('.')[0]))
+      for (const v of versions.slice(0, 2)) found.push(`${home}/.nvm/versions/node/${v}/bin/node`)
+    } catch {
+      // no nvm here
+    }
+  }
+  found.push('/opt/homebrew/bin/node', '/usr/local/bin/node')
+  return found
+}
+
 // Module memory: a reload starts the sampler over (the old child is killed).
 let isProbing = false
 
@@ -57,11 +81,9 @@ async function runProbe($: EngineInterface) {
   // The feed reads the JetDeck daemon (vitals and the plan usage) when it can,
   // and samples locally when it cannot (bin/feed.mjs).
   const script = `${$.plugin.root}/bin/feed.mjs`
-  const candidates = [
-    ['node', script, String(INTERVAL_MS)],
-    // Desktop may start the engine without nvm's PATH: ask an interactive zsh.
-    ['/bin/zsh', '-ilc', 'exec node "$0" "$1"', script, String(INTERVAL_MS)],
-  ]
+  // Desktop may start the engine without nvm's PATH, so after `node` itself
+  // the usual install places are tried by path: no shell, no rc files run.
+  const candidates = (await nodeCandidates($)).map(node => [node, script, String(INTERVAL_MS)])
   const cpu: { at: number; value: number }[] = []
   try {
     for (let attempt = 0; attempt < RETRIES; attempt += 1) {

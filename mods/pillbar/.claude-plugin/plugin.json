@@ -2,5 +2,9 @@
   "name": "pillbar",
   "version": "0.3.0",
   "description": "Capsule band above the prompt: 5-hour and weekly quota, context window, CPU, memory and disk",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Sheldon Chang"
+  },
+  "license": "MIT"
 }

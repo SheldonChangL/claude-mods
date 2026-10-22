@@ -35,6 +35,9 @@ test('thinking is narrated by haiku into the pane, on every surface', async ($, 
   })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  // Narration is opt-in: /narrator turns it on.
+  // @ts-ignore the command input type is too deep for tsc here
+  await $.command.run({ command: 'narrator', args: '' } as never)
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })) {
     // drain
   }
@@ -74,6 +77,9 @@ test('tool arguments reach haiku so it can tell the intent', async ($, on) => {
   })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  // Narration is opt-in: /narrator turns it on.
+  // @ts-ignore the command input type is too deep for tsc here
+  await $.command.run({ command: 'narrator', args: '' } as never)
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })) {
     // drain
   }
@@ -99,6 +105,9 @@ test('the clear button empties the pane', async ($, on) => {
   })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  // Narration is opt-in: /narrator turns it on.
+  // @ts-ignore the command input type is too deep for tsc here
+  await $.command.run({ command: 'narrator', args: '' } as never)
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })) {
     // drain
   }

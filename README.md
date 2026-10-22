@@ -7,7 +7,7 @@ Mods for Claude Code (CLI and the Desktop app's Code tab), each in its own folde
 | [pillbar](mods/pillbar) | A capsule band above the prompt: the 5-hour and weekly plan usage, this session's context window, and the machine's CPU, memory and disk. |
 | [clawd-run](mods/clawd-run) | While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt, with the turn's tokens and cost. |
 | [token-tank](mods/token-tank) | A pixel-art aquarium above the prompt: Claude's turns feed the fish, the fish spit coins onto the sand and you pick them up; a shop, feeding and levels live in a pane (`/fish`). |
-| [plain-narrator](mods/plain-narrator) | A pane where Haiku explains, in plain language, what Claude is doing, with a side chat you can ask using the model you pick (Haiku, Sonnet, Opus, Fable, or the main conversation itself). |
+| [plain-narrator](mods/plain-narrator) | A pane where Haiku explains, in plain language, what Claude is doing, with a side chat you can ask using the model you pick (Haiku, Sonnet, Opus, Fable, or the main conversation itself). Off until `/narrator` turns it on: it sends Claude's visible text and tool arguments to Haiku on your own quota. |
 
 pillbar, clawd-run and token-tank share the band above the prompt and stack instead of replacing each other.
 
@@ -48,6 +48,13 @@ Each mod is self-contained. From a mod's folder:
 claude plugin test .
 claude plugin validate .
 ```
+
+## What they touch
+
+- Nothing leaves your machine except calls to the Claude API through your own Claude Code session, and only plain-narrator makes any (to Haiku, and only after `/narrator`).
+- token-tank keeps its save in the plugin's own store under `~/.claude`; it reads the `language` row of your settings to pick its words.
+- pillbar runs a small Node child from its own folder that samples CPU, memory and disk; it talks to the private JetDeck daemon only when `PILLBAR_JETDECK_DIR` names it.
+- No mod writes outside `~/.claude`, downloads code, or runs a shell.
 
 ## Support
 
