@@ -1,0 +1,64 @@
+[
+ {
+  "workload": "desktop",
+  "usage": {
+   "input_tokens": 3000,
+   "output_tokens": 1500,
+   "cache_read_input_tokens": 250000,
+   "cache_creation_input_tokens": 5000
+  },
+  "legacy": {
+   "effective": 37250,
+   "energy": 19.45,
+   "day1Minted": 6161,
+   "day2Minted": 6623,
+   "dailyFromDay2": 6627,
+   "day1Fish": 10,
+   "day1Balance": 5061,
+   "allUnlockedAffordableDay": 1
+  },
+  "v03": {
+   "effective": 17250,
+   "energy": 6.09,
+   "day1Minted": 402,
+   "day2Minted": 480,
+   "day1Fish": 4,
+   "day1Balance": 122,
+   "firstRareDay": 4,
+   "firstEpicDay": 14,
+   "firstLegendaryDay": 30,
+   "allSpeciesOwnedDay": null
+  }
+ },
+ {
+  "workload": "small",
+  "usage": {
+   "input_tokens": 500,
+   "output_tokens": 300,
+   "cache_read_input_tokens": 60000,
+   "cache_creation_input_tokens": 1000
+  },
+  "legacy": {
+   "effective": 8350,
+   "energy": 8.35,
+   "day1Minted": 2223,
+   "day2Minted": 2616,
+   "dailyFromDay2": 2614,
+   "day1Fish": 10,
+   "day1Balance": 1493,
+   "allUnlockedAffordableDay": 2
+  },
+  "v03": {
+   "effective": 3550,
+   "energy": 1.42,
+   "day1Minted": 92,
+   "day2Minted": 93,
+   "day1Fish": 3,
+   "day1Balance": 122,
+   "firstRareDay": 24,
+   "firstEpicDay": null,
+   "firstLegendaryDay": null,
+   "allSpeciesOwnedDay": null
+  }
+ }
+]

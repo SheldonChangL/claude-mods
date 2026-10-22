@@ -1,8 +1,11 @@
-// Tokens → energy → coins, levels, and the per-turn and reward transitions.
+// Tokens → energy → coins (economy v0.3), fish levels, and the per-turn and reward transitions.
+// Energy is shared by a weighted square root (production_i = energy × w_i / √Σw), then each
+// fish's daily soft cap applies; tunables live in economy.config.ts.
 
-import { rollDay } from './day'
+import { dayKey, rollDay } from './day'
+import { ECONOMY } from './economy.config'
 import { SPECIES } from './species'
-import type { Fish, FishState, GameEvent, GameState, Outcome, RewardKind, Usage } from './types'
+import type { Fish, FishState, GameEvent, GameState, Outcome, Rarity, RewardKind, SpeciesId, Usage } from './types'
 import { bump, clamp, num, refuse } from './util'
 
 export const PENDING_CAP = 80
@@ -17,26 +20,85 @@ export const XP_THRESHOLDS: readonly number[] = [0, 100, 300, 600, 1000, 1500, 2
 export const REWARD_COOLDOWN_MS: Record<RewardKind, number> = { edit: 60_000, test: 180_000, commit: 300_000 }
 export const REWARD_COINS: Record<RewardKind, number> = { edit: 2, test: 8, commit: 12 }
 
-const ENERGY_KNEE = 15000
+/** Usage fields as finite non-negative numbers; missing, negative, NaN and Infinity count as 0. */
+function field(v: unknown): number {
+  return Math.max(0, num(v, 0))
+}
 
+/** input + output×2 + cacheRead×0.02 + cacheWrite×1.25 (weights in ECONOMY.tokenWeights). */
 export function effectiveTokens(u: Partial<Usage> | null | undefined): number {
   if (!u || typeof u !== 'object') return 0
-  const f = (v: unknown) => Math.max(0, num(v, 0))
+  const w = ECONOMY.tokenWeights
   return (
-    f(u.input_tokens) +
-    2 * f(u.output_tokens) +
-    0.1 * f(u.cache_read_input_tokens) +
-    1.25 * f(u.cache_creation_input_tokens)
+    w.input * field(u.input_tokens) +
+    w.output * field(u.output_tokens) +
+    w.cacheRead * field(u.cache_read_input_tokens) +
+    w.cacheWrite * field(u.cache_creation_input_tokens)
   )
 }
 
+/** (min(eff, 15000) + max(eff − 15000, 0) × 0.1) / 2500 — fractional, never negative. */
 export function energyOf(effective: number): number {
   const e = Math.max(0, num(effective, 0))
-  return (Math.min(e, ENERGY_KNEE) + 0.2 * Math.max(e - ENERGY_KNEE, 0)) / 1000
+  const { knee, overKnee, tokensPerEnergy } = ECONOMY.energy
+  return (Math.min(e, knee) + overKnee * Math.max(e - knee, 0)) / tokensPerEnergy
 }
 
+export function rarityOf(species: SpeciesId): Rarity {
+  return SPECIES[species]?.rarity ?? 'common'
+}
+
+/** w = rarity weight × levelBoost × hungerFactor × moodFactor. */
+export function fishWeight(f: Pick<Fish, 'species' | 'level' | 'hunger' | 'mood'>): number {
+  const w = ECONOMY.rarityWeight[rarityOf(f.species)] * levelBoost(f.level) * hungerFactor(f.hunger) * moodFactor(f.mood)
+  return Number.isFinite(w) && w > 0 ? w : 0
+}
+
+/**
+ * Weighted square-root split: production_i = energy × w_i / √Σw. Adding a fish of positive
+ * weight never lowers the total (energy × √Σw); all zeros when there is nothing to share.
+ */
+export function allocate(energy: number, weights: readonly number[]): number[] {
+  const e = num(energy, 0)
+  const ws = weights.map((w) => (Number.isFinite(w) && w > 0 ? w : 0))
+  const total = ws.reduce((a, b) => a + b, 0)
+  if (!(e > 0) || !(total > 0) || !Number.isFinite(total)) return ws.map(() => 0)
+  const root = Math.sqrt(total)
+  return ws.map((w) => (e * w) / root)
+}
+
+/**
+ * The daily soft cap for one fish: the raw amount still under `quota` (after `used` raw today)
+ * pays in full, the rest pays `factor`. Splitting a turn into smaller ones pays the same.
+ */
+export function applyQuota(raw: number, used: number, quota: number, factor: number = ECONOMY.overQuotaFactor): { credited: number; used: number; isOver: boolean } {
+  const r = Math.max(0, num(raw, 0))
+  const u = Math.max(0, num(used, 0))
+  const room = Math.max(0, quota - u)
+  const full = Math.min(r, room)
+  return { credited: full + factor * (r - full), used: u + r, isOver: u + r > quota }
+}
+
+export function dailyQuotaOf(species: SpeciesId): number {
+  return ECONOMY.dailyQuota[rarityOf(species)]
+}
+
+/** The fish's daily counter for `now`'s local day (reset on a new day). */
+export function rollFishDay(f: Fish, now: number): Fish {
+  const key = dayKey(now)
+  return f.dailyKey === key ? f : { ...f, dailyKey: key, dailyRaw: 0 }
+}
+
+/** Whether the fish has used up today's full-rate quota. */
+export function isOverQuota(f: Fish, now: number): boolean {
+  const g = rollFishDay(f, now)
+  return g.dailyRaw >= dailyQuotaOf(g.species)
+}
+
+/** 1 + boostPerLevel × (level − 1): +5 % a level since v0.3 (was +15 %, which let a levelled common rival a rare). */
 export function levelBoost(level: number): number {
-  return 1 + 0.15 * (level - 1)
+  const lv = clamp(Math.floor(num(level, 1)), 1, MAX_LEVEL)
+  return 1 + ECONOMY.fishLevel.boostPerLevel * (lv - 1)
 }
 
 export function hungerFactor(hunger: number): number {
@@ -60,8 +122,14 @@ export function xpToNext(fish: Pick<Fish, 'level' | 'xp'>): number {
   return Math.max(0, (XP_THRESHOLDS[fish.level] ?? Infinity) - fish.xp)
 }
 
+/** Coins to raise a fish from `level`: costPerLevel × level × its rarity weight (the gain scales with the weight too). */
+export function levelUpCost(fish: Pick<Fish, 'species' | 'level'>): number {
+  return ECONOMY.fishLevel.costPerLevel * fish.level * ECONOMY.rarityWeight[rarityOf(fish.species)]
+}
+
+/** @deprecated The common-rarity cost only; use levelUpCost(fish). */
 export function LEVEL_UP_COST(level: number): number {
-  return 50 * level
+  return ECONOMY.fishLevel.costPerLevel * level
 }
 
 const TRANSIENT: FishState[] = ['spitCoin', 'feeding', 'happy']
@@ -81,10 +149,12 @@ export function applyTurn(state: GameState, { turnId, usage, now }: TurnInput): 
   const hungryEvents: GameEvent[] = []
   let minted = 0
 
-  const fish = rolled.fish.map((f): Fish => {
-    const rate = SPECIES[f.species]?.rate ?? 1
-    const progress =
-      f.carry + energy * rate * levelBoost(f.level) * hungerFactor(f.hunger) * moodFactor(f.mood)
+  const today = rolled.fish.map((f) => rollFishDay(f, now))
+  const raws = allocate(energy, today.map(fishWeight))
+
+  const fish = today.map((f, i): Fish => {
+    const { credited, used } = applyQuota(raws[i] ?? 0, f.dailyRaw, dailyQuotaOf(f.species))
+    const progress = f.carry + credited
     const whole = Math.floor(progress)
     const coins = Math.min(whole, Math.max(0, PENDING_CAP - f.pending))
     const hunger = Math.max(0, f.hunger - Math.min(4, 1 + energy * 0.5))
@@ -114,8 +184,10 @@ export function applyTurn(state: GameState, { turnId, usage, now }: TurnInput): 
 
     return {
       ...f,
+      // Coins past the pending cap are lost; the fraction below one coin is kept.
       carry: progress - whole,
       pending: f.pending + coins,
+      dailyRaw: used,
       xp: f.xp + Math.round(energy * 10),
       hunger,
       mood,
@@ -123,7 +195,6 @@ export function applyTurn(state: GameState, { turnId, usage, now }: TurnInput): 
       since,
     }
   })
-
 
   const s = rolled.stats
   const stats = {
@@ -136,7 +207,11 @@ export function applyTurn(state: GameState, { turnId, usage, now }: TurnInput): 
     totalTurns: s.totalTurns + 1,
   }
 
-  return { state: bump(rolled, { fish, stats, processedTurns }, now), events: [...mintedEvents, ...hungryEvents] }
+  const lifetimeProducedCoins = rolled.lifetimeProducedCoins + minted
+  return {
+    state: bump(rolled, { fish, stats, processedTurns, lifetimeProducedCoins }, now),
+    events: [...mintedEvents, ...hungryEvents],
+  }
 }
 
 export function reward(state: GameState, { kind, now }: { kind: RewardKind; now: number }): Outcome {

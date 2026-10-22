@@ -1,3 +1,4 @@
 .DS_Store
 mods/*/assets/tools/codex*.log
 mods/*/assets/preview/
+mods/*/docs/economy/daily/

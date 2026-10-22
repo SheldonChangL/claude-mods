@@ -1,6 +1,7 @@
 // Creating fish and the player's per-fish actions: feed, collect, rename, level up.
 
-import { LEVEL_UP_COST, MAX_LEVEL, XP_THRESHOLDS } from './economy'
+import { dayKey } from './day'
+import { levelUpCost, MAX_LEVEL, XP_THRESHOLDS } from './economy'
 import { SPECIES } from './species'
 import type { Fish, GameState, Outcome, SpeciesId } from './types'
 import { bump, refuse } from './util'
@@ -20,6 +21,8 @@ export function newFish(species: SpeciesId, now: number, idSeed: string, name?: 
     mood: 70,
     carry: 0,
     pending: 0,
+    dailyRaw: 0,
+    dailyKey: dayKey(now),
     bornAt: now,
     lastFedAt: now,
     state: 'swim',
@@ -154,11 +157,32 @@ export function levelUp(state: GameState, fishId: string, now: number): Outcome 
   if (!target) return refuse(state, 'no-such-fish')
   if (target.level >= MAX_LEVEL) return refuse(state, 'max-level')
   if (target.xp < (XP_THRESHOLDS[target.level] ?? Infinity)) return refuse(state, 'not-enough-xp')
-  const cost = LEVEL_UP_COST(target.level)
+  const cost = levelUpCost(target)
   if (state.coins < cost) return refuse(state, 'not-enough-coins')
   const level = target.level + 1
   const fish = state.fish.map((f): Fish =>
     f.id === fishId ? { ...f, level, state: 'happy', since: now } : f,
   )
   return { state: bump(state, { fish, coins: state.coins - cost }, now), events: [{ kind: 'levelUp', fishId, level }] }
+}
+
+/**
+ * Let a fish go to free its slot (no refund; its pending coins go to the wallet first).
+ * The last fish stays: an empty tank could never earn again.
+ */
+export function releaseFish(state: GameState, fishId: string, now: number): Outcome {
+  const target = state.fish.find((f) => f.id === fishId)
+  if (!target) return refuse(state, 'no-such-fish')
+  if (state.fish.length <= 1) return refuse(state, 'last-fish')
+  const s = state.stats
+  const next = bump(
+    state,
+    {
+      fish: state.fish.filter((f) => f.id !== fishId),
+      coins: state.coins + target.pending,
+      stats: { ...s, todayCoinsCollected: s.todayCoinsCollected + target.pending, totalCoinsCollected: s.totalCoinsCollected + target.pending },
+    },
+    now,
+  )
+  return { state: next, events: target.pending > 0 ? [{ kind: 'collected', fishId, coins: target.pending }] : [] }
 }

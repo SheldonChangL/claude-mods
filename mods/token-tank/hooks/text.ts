@@ -27,10 +27,26 @@ export const S = {
   shopFood: { zh: '飼料', en: 'Food' },
   buy: { zh: '購買', en: 'Buy' },
   place: { zh: '放入', en: 'Place' },
-  lockedAt: { zh: '🔒 {n} 條魚', en: '🔒 {n} fish' },
-  moreLocked: { zh: '還有 {n} 種魚未解鎖，養更多魚就會出現。', en: '{n} more species are locked; keep more fish and they appear.' },
+  lockedAt: { zh: '🔒 Lv.{n}', en: '🔒 Lv.{n}' },
+  moreLocked: { zh: '還有 {n} 種魚未解鎖，魚缸升級後出現。', en: '{n} more species unlock as the tank levels up.' },
   mystery: { zh: '？？？', en: '???' },
   rarity0: { zh: '普通', en: 'Common' },
+  slotCard: { zh: '魚槽 +1', en: 'Fish slot +1' },
+  slotSub: { zh: '魚槽 {n}/{max}', en: 'slots {n}/{max}' },
+  slotLocked: { zh: '🔒 Lv.{n} 開放', en: '🔒 at Lv.{n}' },
+  slotsMax: { zh: '已達上限', en: 'At the maximum' },
+  tankFull: { zh: '魚槽已滿', en: 'Slots full' },
+  lockedLv: { zh: '🔒 Lv.{n}', en: '🔒 Lv.{n}' },
+  release: { zh: '🕊 放生', en: '🕊 Release' },
+  releaseAsk: { zh: '確定放生{name}？不退款。', en: 'Release {name}? No refund.' },
+  yes: { zh: '確定', en: 'Yes' },
+  no: { zh: '取消', en: 'No' },
+  overQuota: { zh: '今日產幣已減速', en: 'coin rate reduced today' },
+  overQuotaBand: { zh: '有魚今日產幣額度用完，效率降低', en: 'some fish are past their daily quota; coins slow down' },
+  tankLv: { zh: '魚缸 Lv.{n}', en: 'Tank Lv.{n}' },
+  tankNext: { zh: '{have} / {need} 累計產幣', en: '{have} / {need} lifetime coins' },
+  tankMax: { zh: '最高等級', en: 'top level' },
+  weightShort: { zh: '權重 {r}', en: 'weight {r}' },
   rarity1: { zh: '稀有', en: 'Rare' },
   rarity2: { zh: '史詩', en: 'Epic' },
   rarity3: { zh: '傳說', en: 'Legendary' },
@@ -135,6 +151,7 @@ export function describe(state: GameState, e: GameEvent, lang: Lang): string | n
         const name = kind ? decorName(kind, lang) : tr(lang, 'decorWord')
         return zh ? `你放了${name}進魚缸，花了 ${e.price} 金幣。` : `You placed ${name} in the tank for ${e.price} coins.`
       }
+      if (e.what === 'slot') return zh ? `你擴充了一格魚槽，花了 ${e.price} 金幣。` : `You added a fish slot for ${e.price} coins.`
       return zh ? `你買了飼料，花了 ${e.price} 金幣。` : `You bought food for ${e.price} coins.`
     }
     case 'levelUp':
@@ -161,9 +178,14 @@ const REFUSALS: Record<string, Pair> = {
   'no-food': { zh: '沒有飼料了，到商店買一些。', en: 'No food left; buy some in the shop.' },
   'nothing-to-collect': { zh: '現在沒有金幣可以收。', en: 'No coins to collect right now.' },
   'not-enough-coins': { zh: '金幣不夠。', en: 'Not enough coins.' },
-  'tank-full': { zh: '魚缸滿了（最多 10 條魚）。', en: 'The tank is full (10 fish at most).' },
+  'tank-full': { zh: '魚槽滿了，升級魚缸或購買魚槽。', en: 'The slots are full; level the tank up or buy a slot.' },
   'decor-full': { zh: '裝飾太多了（最多 8 個）。', en: 'Too many decorations (8 at most).' },
-  'locked': { zh: '這種魚還沒解鎖，養更多魚就會開放。', en: 'This species is locked; keep more fish to unlock it.' },
+  'locked': { zh: '這種魚還沒解鎖。', en: 'This species is locked.' },
+  'locked-level': { zh: '魚缸等級不夠，還不能買這種魚。', en: 'The tank level is too low for this species.' },
+  'slot-locked-level': { zh: '這個等級還不能再買魚槽。', en: 'No more slots can be bought at this level.' },
+  'slots-max': { zh: '魚槽已經是上限了。', en: 'The slots are at their maximum.' },
+  'duplicate-purchase': { zh: '剛剛已經買過了。', en: 'That was just bought.' },
+  'last-fish': { zh: '最後一條魚不能放生。', en: 'The last fish cannot be released.' },
   'max-level': { zh: '已經是最高等級了。', en: 'Already at the top level.' },
   'not-enough-xp': { zh: '經驗值還不夠升級。', en: 'Not enough XP to level up.' },
   'no-such-fish': { zh: '找不到這條魚。', en: 'No such fish.' },

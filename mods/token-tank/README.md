@@ -30,12 +30,23 @@ The words follow Claude's language: Chinese when Claude Code's `language` settin
 
 ## How coins are made
 
-`effective = input + 2×output + 0.1×cacheRead + 1.25×cacheWrite` per main-loop
+`effective = input + 2×output + 0.02×cacheRead + 1.25×cacheWrite` per main-loop
 turn (subagents are part of the same work and do not pay twice). Energy is
-`effective / 1000`, with the part above 15,000 counted at a fifth, so idle
-prompts are a poor way to farm. Each fish adds `energy × rate × level × hunger
-× mood` to its progress; whole coins wait on the fish (at most 80 each) until
-you collect them. Fractions carry over, so small turns still add up.
+`(min(effective, 15,000) + 0.1 × the rest) / 2,500`, so idle prompts are a poor
+way to farm. The tank shares each turn's energy by weighted square root: a fish
+weighs its rarity (common 1, rare 3, epic 10, legendary 32) times its level,
+hunger and mood, and gets `energy × w / √Σw`, so more fish earn more but with
+diminishing returns and rarer fish earn far more each. Every fish has a daily
+quota by rarity (120 / 360 / 960 / 1,920 coins); past it coins come at a fifth.
+Whole coins wait on the sand (at most 80 a fish) until you pick them up;
+fractions carry over.
+
+The tank levels up on lifetime coins produced (18 levels, Lv.5 at 640, Lv.10 at
+3,200, Lv.18 at 11,500); levels unlock rarer species and more fish slots, and
+extra slots can be bought. Edits, passing tests and commits pay a little extra
+into the wallet but never count toward the level. `docs/economy-balance-report.md`
+holds the 60-day simulations behind these numbers; `npx tsx
+scripts/simulate-economy.ts` reruns them.
 
 ## Where it is stored
 

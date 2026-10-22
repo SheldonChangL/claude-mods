@@ -24,16 +24,21 @@ export type SpeciesId =
 
 export type SpeciesSize = 's' | 'm' | 'l'
 
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
+
 export type Species = {
   id: SpeciesId
   /** Display names: Traditional Chinese first, English second. */
   zh: string
   en: string
   price: number
-  /** Coins per unit of energy at level 1, full hunger. */
+  rarity: Rarity
+  /** The rarity's base weight in the tank's share of energy (economy v0.3); equals ECONOMY.rarityWeight[rarity]. */
   rate: number
   size: SpeciesSize
-  /** How many fish of any kind the tank must hold before the shop lists it. */
+  /** The tank level (from lifetime produced coins) the shop sells it at. */
+  unlockLevel: number
+  /** @deprecated Same value as `unlockLevel` (a tank level since economy v0.3, no longer a fish count). */
   unlockAt: number
   /** Swim speed, cells per second at the design size, before level and mood. */
   speed: number
@@ -55,6 +60,10 @@ export type Fish = {
   carry: number
   /** Coins spat and not yet collected (at most PENDING_CAP). */
   pending: number
+  /** Raw coin production (before the daily soft cap) on `dailyKey`; the cap is spent from it. */
+  dailyRaw: number
+  /** YYYY-MM-DD in local time of the day `dailyRaw` counts. */
+  dailyKey: string
   bornAt: number
   lastFedAt: number
   /** The last event's state, for the drawing; `since` is its start time. */
@@ -113,6 +122,14 @@ export type RewardKind = 'edit' | 'test' | 'commit'
 
 export type GameState = {
   schemaVersion: 3
+  /** Economy v0.3 marker: a save without it is migrated once (lifetime coins, slots, daily caps). */
+  economyVersion: 3
+  /** ECONOMY_CONFIG_VERSION of the tuning the save last ran under. */
+  economyConfigVersion: number
+  /** Coins the fish produced from energy, ever (never lowered by collecting or spending; rewards not included). Sets the tank level. */
+  lifetimeProducedCoins: number
+  /** Extra fish slots bought with coins, on top of the tank level's base slots. */
+  slotsBought: number
   /** Bumped on every write; a session that reads a newer one than it last saw merges. */
   revision: number
   coins: number
@@ -149,7 +166,7 @@ export type GameEvent =
   | { kind: 'fed'; fishId: string | null; count: number }
   | { kind: 'dropped'; x: number; y: number; eaters: string[] }
   | { kind: 'startled'; fishId: string }
-  | { kind: 'bought'; what: 'fish' | 'decor' | 'food'; id: string; price: number }
+  | { kind: 'bought'; what: 'fish' | 'decor' | 'food' | 'slot'; id: string; price: number }
   | { kind: 'levelUp'; fishId: string; level: number }
   | { kind: 'renamed'; fishId: string; name: string }
   | { kind: 'reward'; reward: RewardKind; coins: number }
@@ -178,6 +195,8 @@ declare module 'claude-code' {
       isPinned: boolean
       /** The language the words are drawn in this session. */
       lang: 'zh' | 'en'
+      /** The fish whose release awaits a second press. */
+      confirmRelease: string | null
     }
   }
 }

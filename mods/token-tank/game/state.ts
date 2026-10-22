@@ -2,6 +2,7 @@
 
 import { dayKey, rollDay } from './day'
 import { levelForXp, MAX_LEVEL, PENDING_CAP, PROCESSED_TURNS_KEEP } from './economy'
+import { ECONOMY, ECONOMY_CONFIG_VERSION } from './economy.config'
 import { cleanName, newFish } from './fish'
 import { MAX_DECOR, MAX_FISH } from './shop'
 import { isDecorId, isSpeciesId, SPECIES } from './species'
@@ -35,6 +36,10 @@ function emptyStats(now: number): Stats {
 export function newGame(now: number): GameState {
   return {
     schemaVersion: 3,
+    economyVersion: 3,
+    economyConfigVersion: ECONOMY_CONFIG_VERSION,
+    lifetimeProducedCoins: 0,
+    slotsBought: 0,
     revision: 1,
     coins: 150,
     food: 10,
@@ -66,6 +71,7 @@ const count = (v: unknown, d: number) => Math.floor(nonNeg(v, d))
 const oneOf = <T extends string>(v: unknown, list: readonly T[], d: T): T =>
   list.includes(v as T) ? (v as T) : d
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d)
+const isDayKey = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 
 function sanitizeFish(raw: unknown, i: number, now: number, taken: Set<string>): Fish | null {
   if (!isObj(raw)) return null
@@ -85,6 +91,8 @@ function sanitizeFish(raw: unknown, i: number, now: number, taken: Set<string>):
     mood: clamp(num(raw.mood, 70), 0, 100),
     carry: carry - Math.floor(carry),
     pending: clamp(Math.floor(num(raw.pending, 0)), 0, PENDING_CAP),
+    dailyRaw: nonNeg(raw.dailyRaw, 0),
+    dailyKey: isDayKey(raw.dailyKey) ? raw.dailyKey : dayKey(now),
     bornAt: num(raw.bornAt, now),
     lastFedAt: num(raw.lastFedAt, now),
     state: oneOf(raw.state, FISH_STATES, 'swim'),
@@ -127,7 +135,7 @@ export function sanitize(raw: Obj, now: number): GameState {
   const rs = isObj(raw.stats) ? raw.stats : {}
   const base = emptyStats(now)
   const stats: Stats = {
-    todayKey: typeof rs.todayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rs.todayKey) ? rs.todayKey : base.todayKey,
+    todayKey: isDayKey(rs.todayKey) ? rs.todayKey : base.todayKey,
     todayEffectiveTokens: nonNeg(rs.todayEffectiveTokens, 0),
     todayCoinsMinted: count(rs.todayCoinsMinted, 0),
     todayCoinsCollected: count(rs.todayCoinsCollected, 0),
@@ -169,8 +177,16 @@ export function sanitize(raw: Obj, now: number): GameState {
     if (typeof v === 'number' && Number.isFinite(v)) lastRewardAt[k] = v
   }
 
+  // Economy v0.3: a save without lifetimeProducedCoins takes the coins its fish ever minted
+  // (stats.totalCoinsMinted never included rewards); one that has it keeps it, never lower than that.
+  const lifetimeProducedCoins = Math.max(nonNeg(raw.lifetimeProducedCoins, 0), stats.totalCoinsMinted)
+
   return {
     schemaVersion: 3,
+    economyVersion: 3,
+    economyConfigVersion: count(raw.economyConfigVersion, ECONOMY_CONFIG_VERSION),
+    lifetimeProducedCoins,
+    slotsBought: Math.min(count(raw.slotsBought, 0), ECONOMY.slotPrices.length),
     revision: Math.max(1, Math.floor(num(raw.revision, 1))),
     coins: count(raw.coins, 0),
     food: count(raw.food, 0),
@@ -190,7 +206,15 @@ export function sanitize(raw: Obj, now: number): GameState {
 
 // ---------- migrate ----------
 
-export type Migrated = { state: GameState; migratedFrom: number | null; isReset: boolean }
+export type Migrated = {
+  state: GameState
+  migratedFrom: number | null
+  isReset: boolean
+  /** The save predates economy v0.3 and was converted (back up the raw save before writing). */
+  economyMigrated: boolean
+  /** Converting threw: `state` is a fresh game that must NOT be written over the raw save. */
+  isFailed: boolean
+}
 
 /** v2: `{version:2, coins, fish:[{id,species,name,xp,hunger,carry,pending}], decorations:[string], totalEffectiveTokens}`. */
 function fromV2(raw: Obj, now: number): GameState {
@@ -218,13 +242,27 @@ function fromV2(raw: Obj, now: number): GameState {
   )
 }
 
-export function migrate(raw: unknown, now: number): Migrated {
-  if (raw === undefined || raw === null) return { state: newGame(now), migratedFrom: null, isReset: false }
+function migrateRaw(raw: unknown, now: number): Omit<Migrated, 'isFailed'> {
+  if (raw === undefined || raw === null) return { state: newGame(now), migratedFrom: null, isReset: false, economyMigrated: false }
   if (isObj(raw) && raw.schemaVersion === 3) {
-    return { state: rollDay(sanitize(raw, now), now), migratedFrom: null, isReset: false }
+    const economyMigrated = raw.economyVersion !== 3
+    const state = rollDay(sanitize(raw, now), now)
+    return { state: { ...state, economyConfigVersion: ECONOMY_CONFIG_VERSION }, migratedFrom: null, isReset: false, economyMigrated }
   }
-  if (isObj(raw) && raw.version === 2) return { state: fromV2(raw, now), migratedFrom: 2, isReset: false }
-  return { state: newGame(now), migratedFrom: null, isReset: true }
+  if (isObj(raw) && raw.version === 2) return { state: fromV2(raw, now), migratedFrom: 2, isReset: false, economyMigrated: true }
+  return { state: newGame(now), migratedFrom: null, isReset: true, economyMigrated: false }
+}
+
+/**
+ * Whatever the store held → a current GameState. Idempotent: migrating its own output
+ * changes nothing but the day roll. Never throws; on a failure `isFailed` is set.
+ */
+export function migrate(raw: unknown, now: number): Migrated {
+  try {
+    return { ...migrateRaw(raw, now), isFailed: false }
+  } catch {
+    return { state: newGame(now), migratedFrom: null, isReset: false, economyMigrated: false, isFailed: true }
+  }
 }
 
 // ---------- log ----------
@@ -242,7 +280,8 @@ export function appendLog(state: GameState, text: string, now: number): GameStat
  * Limitations — this is a heuristic, not a CRDT:
  * - coins = max: a spend on one side and an earn on the other loses one of them.
  * - pending = max: a collect on one side plus a mint on the other can pay the same coins twice.
- * - fish only on one side are kept (there is no "remove fish" op), capped at MAX_FISH.
+ * - fish only on one side are kept (a fish released on one side comes back), capped at MAX_FISH.
+ * - lifetimeProducedCoins and slotsBought take the max (the tank level never drops).
  * - food, decorations, stats, settings, lastRewardAt come from the base alone.
  */
 export function mergeStates(mine: GameState, theirs: GameState): GameState {
@@ -260,7 +299,9 @@ export function mergeStates(mine: GameState, theirs: GameState): GameState {
       const o = otherById.get(b.id)
       if (!o) return b
       const winner = otherNewer ? o : b
-      return { ...winner, pending: Math.max(b.pending, o.pending) }
+      // The daily soft cap is spent on both sides: keep the larger use of the same day.
+      const dailyRaw = b.dailyKey === o.dailyKey ? Math.max(b.dailyRaw, o.dailyRaw) : winner.dailyRaw
+      return { ...winner, pending: Math.max(b.pending, o.pending), dailyRaw }
     }),
     ...other.fish.filter((f) => !baseIds.has(f.id)),
   ].slice(0, MAX_FISH)
@@ -271,6 +312,8 @@ export function mergeStates(mine: GameState, theirs: GameState): GameState {
     ...base,
     revision: Math.max(mine.revision, theirs.revision) + 1,
     coins: Math.max(mine.coins, theirs.coins),
+    lifetimeProducedCoins: Math.max(mine.lifetimeProducedCoins, theirs.lifetimeProducedCoins),
+    slotsBought: Math.max(mine.slotsBought, theirs.slotsBought),
     fish,
     dex,
     processedTurns,

@@ -25,33 +25,37 @@ const withFish = (s: GameState, i: number, patch: Partial<GameState['fish'][numb
 })
 
 test('effectiveTokens weighs each field and treats missing or bad fields as 0', async () => {
-  expect(effectiveTokens(usage(1000, 500, 2000, 800))).toBe(3200)
+  // economy v0.3: input + 2×output + 0.02×cacheRead + 1.25×cacheWrite
+  expect(effectiveTokens(usage(1000, 500, 2000, 800))).toBe(3040)
   expect(effectiveTokens({ output_tokens: 100 } as Partial<Usage>)).toBe(200)
-  expect(effectiveTokens({ input_tokens: NaN, output_tokens: Infinity, cache_read_input_tokens: 10 } as Usage)).toBe(1)
+  expect(effectiveTokens({ input_tokens: NaN, output_tokens: Infinity, cache_read_input_tokens: 10 } as Usage)).toBe(0.2)
   expect(effectiveTokens(undefined)).toBe(0)
   expect(effectiveTokens(null)).toBe(0)
 })
 
-test('energy is linear to 15000 effective tokens, then a fifth as steep', async () => {
-  expect(energyOf(1000)).toBe(1)
-  expect(energyOf(15000)).toBe(15)
-  expect(energyOf(20000)).toBe(16)
+test('energy is linear to 15000 effective tokens, then a tenth as steep', async () => {
+  expect(energyOf(2500)).toBe(1)
+  expect(energyOf(15000)).toBe(6)
+  expect(energyOf(25000)).toBe(6.4)
   expect(energyOf(0)).toBe(0)
 })
 
 test('applyTurn mints coins per fish into pending and keeps the fraction as carry', async () => {
   const s = newGame(T0)
   const { state, events } = applyTurn(s, { turnId: 't1', usage: usage(10000), now: T0 + 1000 })
-  // guppy: 10 × 1.0 × 0.9 (hunger 80) × 1.04 (mood 70) = 9.36
-  expect(state.fish[0]!.pending).toBe(9)
-  expect(near(state.fish[0]!.carry, 0.36)).toBe(true)
-  // clownfish: 10 × 1.15 × 0.936 = 10.764
-  expect(state.fish[1]!.pending).toBe(10)
+  // energy 4; both commons weigh 1 × 0.9 (hunger 80) × 1.04 (mood 70) = 0.936,
+  // so each makes 4 × 0.936 / √1.872 = 2.7364…
+  const each = (4 * 0.936) / Math.sqrt(1.872)
+  expect(state.fish[0]!.pending).toBe(2)
+  expect(near(state.fish[0]!.carry, each - 2)).toBe(true)
+  expect(near(state.fish[0]!.dailyRaw, each)).toBe(true)
+  expect(state.fish[1]!.pending).toBe(2)
   expect(state.fish[0]!.state).toBe('spitCoin')
-  expect(state.fish[0]!.xp).toBe(100)
+  expect(state.fish[0]!.xp).toBe(40)
   expect(state.fish[0]!.level).toBe(1)
   expect(events.filter((e) => e.kind === 'minted').length).toBe(2)
-  expect(state.stats.totalCoinsMinted).toBe(19)
+  expect(state.stats.totalCoinsMinted).toBe(4)
+  expect(state.lifetimeProducedCoins).toBe(4)
   expect(state.stats.todayTurns).toBe(1)
   expect(state.stats.totalEffectiveTokens).toBe(10000)
   expect(state.processedTurns).toEqual(['t1'])
@@ -61,13 +65,13 @@ test('applyTurn mints coins per fish into pending and keeps the fraction as carr
 
 test('small turns accumulate carry until a coin drops', async () => {
   let s = newGame(T0)
-  const first = applyTurn(s, { turnId: 'small-0', usage: usage(100), now: T0 })
+  const first = applyTurn(s, { turnId: 'small-0', usage: usage(400), now: T0 })
   expect(first.state.fish[0]!.pending).toBe(0)
   expect(first.state.fish[0]!.carry > 0).toBe(true)
   s = first.state
   let turns = 1
   while (s.fish[0]!.pending === 0 && turns < 30) {
-    s = applyTurn(s, { turnId: `small-${turns}`, usage: usage(100), now: T0 + turns }).state
+    s = applyTurn(s, { turnId: `small-${turns}`, usage: usage(400), now: T0 + turns }).state
     turns++
   }
   expect(s.fish[0]!.pending).toBe(1)
@@ -112,14 +116,16 @@ test('a fish below 25 hunger turns hungry and says so', async () => {
 test('collect moves one fish or all fish into the wallet', async () => {
   const s = applyTurn(newGame(T0), { turnId: 't', usage: usage(10000), now: T0 }).state
   const one = collect(s, s.fish[0]!.id, T0 + 5)
-  expect(one.state.coins).toBe(159)
+  expect(one.state.coins).toBe(152)
   expect(one.state.fish[0]!.pending).toBe(0)
-  expect(one.state.fish[1]!.pending).toBe(10)
-  expect(one.events).toEqual([{ kind: 'collected', fishId: s.fish[0]!.id, coins: 9 }])
+  expect(one.state.fish[1]!.pending).toBe(2)
+  expect(one.events).toEqual([{ kind: 'collected', fishId: s.fish[0]!.id, coins: 2 }])
   const all = collect(s, null, T0 + 5)
-  expect(all.state.coins).toBe(169)
-  expect(all.state.stats.totalCoinsCollected).toBe(19)
-  expect(all.state.stats.todayCoinsCollected).toBe(19)
+  expect(all.state.coins).toBe(154)
+  expect(all.state.stats.totalCoinsCollected).toBe(4)
+  expect(all.state.stats.todayCoinsCollected).toBe(4)
+  // Collecting never lowers the lifetime count the tank level is read from.
+  expect(all.state.lifetimeProducedCoins).toBe(4)
   expect(collect(all.state, null, T0 + 6).events).toEqual([{ kind: 'refused', reason: 'nothing-to-collect' }])
 })
 
@@ -139,24 +145,28 @@ test('feed needs food, and short on food feeds the hungriest first', async () =>
   expect(events).toEqual([{ kind: 'fed', fishId: null, count: 1 }])
 })
 
-test('buyFish checks unlocks, price and dex', async () => {
+test('buyFish checks the unlock level, price and dex', async () => {
   const s = newGame(T0)
-  expect(isUnlocked(s, 'tang')).toBe(true)
-  expect(isUnlocked(s, 'angelfish')).toBe(false)
-  expect(buyFish(s, 'angelfish', T0, 'x').events).toEqual([{ kind: 'refused', reason: 'locked' }])
-  expect(buyFish(s, 'tang', T0, 'x').events).toEqual([{ kind: 'refused', reason: 'not-enough-coins' }])
+  // Tank level 1: only the level-1 commons are for sale.
+  expect(isUnlocked(s, 'guppy')).toBe(true)
+  expect(isUnlocked(s, 'tang')).toBe(false)
+  expect(buyFish(s, 'tang', T0, 'x').events).toEqual([{ kind: 'refused', reason: 'locked-level' }])
 
-  const rich = { ...s, coins: 1000 }
+  const lv5 = { ...s, lifetimeProducedCoins: 640 }
+  expect(isUnlocked(lv5, 'tang')).toBe(true)
+  expect(buyFish(lv5, 'tang', T0, 'x').events).toEqual([{ kind: 'refused', reason: 'not-enough-coins' }])
+
+  const rich = { ...lv5, coins: 1000 }
   const { state, events } = buyFish(rich, 'tang', T0, 'x')
-  expect(state.coins).toBe(800)
+  expect(state.coins).toBe(500)
   expect(state.fish.length).toBe(3)
   expect(state.fish[2]!.id).toBe('tang-x')
   expect(state.fish[2]!.name).toBe('藍倒吊')
   expect(state.dex).toEqual(['guppy', 'clownfish', 'tang'])
-  expect(events).toEqual([{ kind: 'bought', what: 'fish', id: 'tang-x', price: 200 }])
-  // Owned once, always for sale.
-  const dexOnly = { ...newGame(T0), fish: [], dex: newGame(T0).dex.concat(['koi' as const]) }
-  expect(isUnlocked(dexOnly, 'koi')).toBe(true)
+  expect(events).toEqual([{ kind: 'bought', what: 'fish', id: 'tang-x', price: 500 }])
+  // Owning a species once (an old save's dex) no longer unlocks it: the tank level does.
+  const dexOnly = { ...newGame(T0), dex: newGame(T0).dex.concat(['koi' as const]) }
+  expect(isUnlocked(dexOnly, 'koi')).toBe(false)
 })
 
 test('buyDecoration and buyFood charge and place', async () => {

@@ -13,10 +13,11 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import type { ShopTab, View } from '../types'
 import type { DecorId, GameEvent, GameState, Outcome, RewardKind } from '../game/types'
-import { applyTurn, effectiveTokens, LEVEL_UP_COST, PENDING_CAP, reward, XP_THRESHOLDS } from '../game/economy'
-import { collect, dropFood, feed, FULL_ENOUGH, levelUp, pendingTotal, rename, startle } from '../game/fish'
+import { applyTurn, effectiveTokens, isOverQuota, levelBoost, levelUpCost, PENDING_CAP, reward, XP_THRESHOLDS } from '../game/economy'
+import { nextSlot, slotCapacity, tankProgress } from '../game/progression'
+import { collect, dropFood, feed, FULL_ENOUGH, levelUp, pendingTotal, releaseFish, rename, startle } from '../game/fish'
 import { DECOR, FOOD_PRICE, SPECIES, SPECIES_LIST } from '../game/species'
-import { buyDecoration, buyFish, buyFood, MAX_DECOR, MAX_FISH, shopList } from '../game/shop'
+import { buyDecoration, buyFish, buyFood, buySlot, MAX_DECOR, shopList } from '../game/shop'
 import { appendLog, mergeStates, migrate } from '../game/state'
 import { decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, FISH_SCALES, laneOrder, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
 import { clock, decorName, describe, fmt, langOf, moodLine, refusalText, speciesName, tr } from './text'
@@ -25,6 +26,10 @@ import type { Lang } from './text'
 const PANE = 'token-tank'
 const STORE_KEY = 'game'
 const BACKUP_KEY = 'game.backup.v2'
+/** The save as it was before the economy v0.3 conversion. */
+const BACKUP_KEY_V2_ECONOMY = 'game.backup.economy2'
+/** True when the stored save could not be converted: nothing is written back. */
+let isStoreReadOnly = false
 /** A turn this long shows the band by itself. */
 const LONG_TURN_MS = 20_000
 
@@ -37,6 +42,7 @@ const notice = atom({ plugin: 'token-tank', key: 'notice' } as const, null as st
 const turn = atom({ plugin: 'token-tank', key: 'turn' } as const, null as { turnId: string; isLong: boolean } | null)
 const isPinned = atom({ plugin: 'token-tank', key: 'isPinned' } as const, false)
 const lang = atom({ plugin: 'token-tank', key: 'lang' } as const, 'zh' as Lang)
+const confirmRelease = atom({ plugin: 'token-tank', key: 'confirmRelease' } as const, null as string | null)
 
 // ---------------------------------------------------------------- persistence
 
@@ -50,6 +56,7 @@ async function storeGet($: EngineInterface): Promise<unknown> {
 }
 
 async function storeSet($: EngineInterface, key: string, value: unknown): Promise<void> {
+  if (isStoreReadOnly) return
   try {
     await $.store.set(key, value)
   } catch {
@@ -111,14 +118,22 @@ async function syncFromStore($: EngineInterface): Promise<void> {
 async function load($: EngineInterface): Promise<GameState> {
   const now = await $.clock.now()
   const raw = await storeGet($)
-  let { state } = migrate(raw, now)
-  const { migratedFrom, isReset } = migrate(raw, now)
+  const migrated = migrate(raw, now)
+  let { state } = migrated
+  const { migratedFrom, isReset, economyMigrated, isFailed } = migrated
+  if (isFailed) {
+    // The old save could not be converted: play on a fresh game in memory and never write over it.
+    isStoreReadOnly = true
+    await update($, game, () => state)
+    return state
+  }
   // A fresh game in English names its first fish in English.
   if ((raw === undefined || isReset) && (await read($, lang)) === 'en') {
     state = { ...state, fish: state.fish.map(f => ({ ...f, name: SPECIES[f.species].en })) }
   }
   if (migratedFrom === 2) await storeSet($, BACKUP_KEY, raw)
-  if (migratedFrom !== null || isReset || raw === undefined) await storeSet($, STORE_KEY, state)
+  if (economyMigrated) await storeSet($, BACKUP_KEY_V2_ECONOMY, raw)
+  if (migratedFrom !== null || isReset || economyMigrated || raw === undefined) await storeSet($, STORE_KEY, state)
   await update($, game, () => state)
   return state
 }
@@ -217,11 +232,6 @@ const ASPECT: Record<GameState['settings']['tankSize'], number> = { s: 9, m: 6.5
 /** Desktop cell estimates: one monospace column and one row in CSS pixels. */
 const PX_PER_COL = 8
 const PX_PER_ROW = 22
-
-function tankLevel(state: GameState): number {
-  const minted = state.stats.totalCoinsMinted
-  return Math.min(50, 1 + Math.floor(Math.sqrt(minted / 40)))
-}
 
 function bar(d: Draw, ratio: number, color: string, widthPx: number): RenderElement {
   const { Svg, Text } = d.el as { Svg?: (p: { source: string; alt: string; width: number; height: number }) => RenderElement; Text: (p: Record<string, unknown>) => RenderElement }
@@ -371,6 +381,7 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
       <Text dimColor>{s.fish.some(f => f.hunger < FULL_ENOUGH) ? tr(d.lang, 'tapToFeed', { n: s.food }) : tr(d.lang, 'allFull', { n: s.food })}</Text>
       {note && <Text color="yellow">{note}</Text>}
       {hungry > 0 && <Text color="yellow">{tr(d.lang, 'hungryCount', { n: hungry })}</Text>}
+      {s.fish.some(f => isOverQuota(f, d.now)) && <Text dimColor>⏳ {tr(d.lang, 'overQuotaBand')}</Text>}
       {hungry > 0 && <Button key="band-feed" plain onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>}
       <Button key="band-open" plain onPress={() => void $.ui.open({ id: PANE, title: 'Token Tank', focus: true })}>{tr(d.lang, 'panel')}</Button>
       {last && <Text dimColor wrap="truncate-end">{last.text}</Text>}
@@ -405,18 +416,23 @@ function choice(d: Draw, key: string, label: string, isChosen: boolean, onPress:
 function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
   const { Box, Text } = d.el
   const s = d.state
+  const progress = tankProgress(s)
   const go = (v: View) => () => void update($, view, () => v)
   const tab = (id: View, label: string) => (current === id ? <Text weight="semibold">{label}</Text> : link(d, `nav-${id}`, label, go(id)))
   return (
     <Box flexDirection="column" gap={1} marginBottom={1}>
       <Box flexDirection="row" gap={2} flexWrap="wrap" alignItems="center">
         <Text weight="bold" color="claude">{tr(d.lang, 'title')}</Text>
-        <Text dimColor>Lv.{tankLevel(s)}</Text>
+        <Text dimColor>{tr(d.lang, 'tankLv', { n: progress.level })}</Text>
+      </Box>
+      <Box flexDirection="row" gap={1} alignItems="center">
+        {bar(d, progress.fraction, '#4cc9f0', Math.max(60, Math.min(160, (d.columns - 24) * 6)))}
+        <Text dimColor>{progress.nextAt === null ? tr(d.lang, 'tankMax') : tr(d.lang, 'tankNext', { have: fmt(progress.lifetime), need: fmt(progress.nextAt) })}</Text>
       </Box>
       <Box flexDirection="row" gap={3} flexWrap="wrap">
         <Text color="yellow">🪙 {fmt(s.coins)}</Text>
         <Text dimColor>🍤 {s.food}</Text>
-        <Text dimColor>🐟 {s.fish.length}/{MAX_FISH}</Text>
+        <Text dimColor>🐟 {s.fish.length}/{slotCapacity(s)}</Text>
       </Box>
       <Box flexDirection="row" gap={3} flexWrap="wrap">
         {tab('shop', tr(d.lang, 'tabShop'))}
@@ -435,6 +451,7 @@ const LOCKED_SHOWN = 2
 
 /** How wide one shop card is, in cells, and how many fit a row. */
 const CARD_W = 24
+const ECONOMY_MAX_SLOTS = 10
 function cardsPerRow(columns: number): number {
   if (columns >= CARD_W * 4 + 6) return 4
   if (columns >= CARD_W * 3 + 4) return 3
@@ -442,10 +459,7 @@ function cardsPerRow(columns: number): number {
   return 1
 }
 
-/** A species' rarity, by how many fish the tank must hold before the shop lists it. */
-function rarityKey(unlockAt: number): 'rarity0' | 'rarity1' | 'rarity2' | 'rarity3' {
-  return unlockAt <= 1 ? 'rarity0' : unlockAt <= 4 ? 'rarity1' : unlockAt <= 6 ? 'rarity2' : 'rarity3'
-}
+const RARITY_KEY = { common: 'rarity0', rare: 'rarity1', epic: 'rarity2', legendary: 'rarity3' } as const
 
 type Card = {
   key: string
@@ -503,23 +517,43 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   let footer: RenderElement | null = null
   if (tab === 'fish') {
     const list = shopList(s)
-    const lockedAll = list.filter(x => !x.isUnlocked)
+    const lockedAll = list.filter(x => !x.isUnlocked).sort((a, b) => a.unlockLevel - b.unlockLevel || a.price - b.price)
     const shown = list.filter(x => x.isUnlocked).concat(lockedAll.slice(0, LOCKED_SHOWN))
     const hidden = lockedAll.length - Math.min(LOCKED_SHOWN, lockedAll.length)
-    cards = shown.map(({ species, isUnlocked, canAfford }) => {
+    cards = shown.map(({ species, rarity, price, unlockLevel, isUnlocked, reason }) => {
       const sp = SPECIES[species]
       return {
         key: `shop-${species}`,
         art: isUnlocked ? (px: number) => fishPortraitSvg(species, px, true) : null,
         name: isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery'),
-        sub: `${tr(d.lang, rarityKey(sp.unlockAt))} · ${tr(d.lang, 'rateShort', { r: sp.rate.toFixed(1) })}`,
-        price: sp.price,
-        action: !isUnlocked
-          ? tr(d.lang, 'lockedAt', { n: sp.unlockAt })
-          : !canAfford
-            ? tr(d.lang, 'notEnough')
-            : { key: `buy-${species}`, label: tr(d.lang, 'buy'), onPress: () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)) },
+        sub: `${tr(d.lang, RARITY_KEY[rarity])} · ${tr(d.lang, 'weightShort', { r: sp.rate })}`,
+        price,
+        action:
+          reason === 'locked-level'
+            ? tr(d.lang, 'lockedLv', { n: unlockLevel })
+            : reason === 'tank-full'
+              ? tr(d.lang, 'tankFull')
+              : reason === 'not-enough-coins'
+                ? tr(d.lang, 'notEnough')
+                : { key: `buy-${species}`, label: tr(d.lang, 'buy'), onPress: () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)) },
       }
+    })
+    // One more card: the next fish slot.
+    const slot = nextSlot(s)
+    cards.push({
+      key: 'shop-slot',
+      art: (px: number) => decorPortraitSvg('rock', px, true),
+      name: tr(d.lang, 'slotCard'),
+      sub: tr(d.lang, 'slotSub', { n: slotCapacity(s), max: ECONOMY_MAX_SLOTS }),
+      price: slot.price ?? 0,
+      action:
+        slot.reason === 'slots-max'
+          ? tr(d.lang, 'slotsMax')
+          : slot.reason === 'slot-locked-level'
+            ? tr(d.lang, 'slotLocked', { n: slot.unlockLevel ?? 0 })
+            : s.coins < (slot.price ?? 0)
+              ? tr(d.lang, 'notEnough')
+              : { key: 'buy-slot', label: tr(d.lang, 'buy'), onPress: () => void commit($, (st, now) => buySlot(st, now)) },
     })
     if (hidden > 0) footer = <Text dimColor wrap="wrap">{tr(d.lang, 'moreLocked', { n: hidden })}</Text>
   } else if (tab === 'decor') {
@@ -571,7 +605,7 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   )
 }
 
-function fishView($: EngineInterface, d: Draw, selected: string | null, renaming: boolean): RenderElement {
+function fishView($: EngineInterface, d: Draw, selected: string | null, renaming: boolean, releasing: string | null): RenderElement {
   const { Box, Text } = d.el
   const Input = (d.el as { Input?: (p: Record<string, unknown>) => RenderElement }).Input
   const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
@@ -585,7 +619,9 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
         const sp = SPECIES[f.species]
         const isOpen = f.id === selected
         const nextXp = XP_THRESHOLDS[f.level] ?? null
-        const canLevel = nextXp !== null && f.xp >= nextXp && s.coins >= LEVEL_UP_COST(f.level)
+        const cost = levelUpCost(f)
+        const canLevel = nextXp !== null && f.xp >= nextXp && s.coins >= cost
+        const slowed = isOverQuota(f, d.now)
         const xpRatio = nextXp === null ? 1 : (f.xp - (XP_THRESHOLDS[f.level - 1] ?? 0)) / Math.max(1, nextXp - (XP_THRESHOLDS[f.level - 1] ?? 0))
         return (
           <Box key={`fish-${f.id}`} flexDirection="column" gap={0}>
@@ -598,7 +634,8 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
             </Box>
             {isOpen && (
               <Box flexDirection="column" gap={0} paddingLeft={COL_THUMB + 1} marginTop={1}>
-                <Text dimColor>{speciesName(sp, d.lang)} · {tr(d.lang, 'rateLine', { rate: (sp.rate * (1 + 0.15 * (f.level - 1))).toFixed(2), pending: f.pending, cap: PENDING_CAP })}</Text>
+                <Text dimColor>{speciesName(sp, d.lang)} · {tr(d.lang, RARITY_KEY[sp.rarity])} · {tr(d.lang, 'rateLine', { rate: (sp.rate * levelBoost(f.level)).toFixed(1), pending: f.pending, cap: PENDING_CAP })}</Text>
+                {slowed && <Text color="yellow">⏳ {tr(d.lang, 'overQuota')}</Text>}
                 <Box flexDirection="row" gap={1} alignItems="center">
                   <Text dimColor>XP</Text>
                   {bar(d, xpRatio, '#4cc9f0', barW)}
@@ -617,9 +654,19 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
                 <Text color="pink" wrap="wrap">❤ {moodLine(s, f.id, d.lang)}</Text>
                 <Box flexDirection="row" columnGap={3} rowGap={0} flexWrap="wrap" marginTop={1}>
                   {link(d, `feed-${f.id}`, `${tr(d.lang, 'feed')} ›`, () => void commit($, (st, now) => feed(st, f.id, now)), s.food <= 0)}
-                  {link(d, `level-${f.id}`, `${tr(d.lang, 'levelUp')}${nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`} ›`, () => void commit($, (st, now) => levelUp(st, f.id, now)), !canLevel)}
+                  {link(d, `level-${f.id}`, `${tr(d.lang, 'levelUp')}${nextXp === null ? '' : ` ${cost}🪙`} ›`, () => void commit($, (st, now) => levelUp(st, f.id, now)), !canLevel)}
                   {link(d, `rename-${f.id}`, `${tr(d.lang, 'rename')} ›`, () => void update($, isRenaming, v => !v))}
+                  {s.fish.length > 1 && link(d, `release-${f.id}`, `${tr(d.lang, 'release')} ›`, () => void update($, confirmRelease, () => f.id))}
                 </Box>
+                {releasing === f.id && (
+                  <Box flexDirection="row" gap={2} alignItems="center" marginTop={1}>
+                    <Text color="yellow">{tr(d.lang, 'releaseAsk', { name: f.name })}</Text>
+                    {link(d, `release-yes-${f.id}`, tr(d.lang, 'yes'), () => {
+                      void commit($, (st, now) => releaseFish(st, f.id, now)).then(() => update($, confirmRelease, () => null))
+                    })}
+                    {link(d, `release-no-${f.id}`, tr(d.lang, 'no'), () => void update($, confirmRelease, () => null))}
+                  </Box>
+                )}
                 {renaming && Input && (
                   <Box flexDirection="column" marginTop={1}>
                     {Input({
@@ -821,7 +868,7 @@ export const register: Register = on => {
     const el = $.ui.resolve(e)
     const { Box, Text } = el
     const state = await read($, game)
-    const [current, tab, selected, note, renaming] = await Promise.all([read($, view), read($, shopTab), read($, selectedId), read($, notice), read($, isRenaming)])
+    const [current, tab, selected, note, renaming, releasing] = await Promise.all([read($, view), read($, shopTab), read($, selectedId), read($, notice), read($, isRenaming), read($, confirmRelease)])
     const now = await $.clock.now()
     if (!state) {
       return (
@@ -836,7 +883,7 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={0} paddingX={1} paddingTop={1}>
         {paneHeader($, d, current)}
         {note && <Text color="yellow" wrap="wrap">{note}</Text>}
-        {current === 'shop' ? shopView($, d, tab) : current === 'fish' ? fishView($, d, selected, renaming) : settingsView($, d)}
+        {current === 'shop' ? shopView($, d, tab) : current === 'fish' ? fishView($, d, selected, renaming, releasing) : settingsView($, d)}
       </Box>
     )
   })
