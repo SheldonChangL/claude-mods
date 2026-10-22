@@ -146,6 +146,9 @@ async function tapTank($: EngineInterface, X: number, Y: number, W: number, rend
   })
 }
 
+/** The last tank drawing, reused while nothing of the tank changed (module memory; a reload starts over). */
+let tankCache: { key: string; source: string; renderedAt: number } | null = null
+
 /** The band's tank is as wide as the band; its size picks the aspect (width ÷ height). */
 const ASPECT: Record<GameState['settings']['tankSize'], number> = { s: 9, m: 6.5, l: 4.5 }
 /** Desktop cell estimates: one monospace column and one row in CSS pixels. */
@@ -223,14 +226,30 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
   const roomPx = d.maxRows > 0 ? Math.max(120, (d.maxRows - 3) * PX_PER_ROW) : 400
   const heightPx = Math.round(Math.min(widthPx / aspect, roomPx))
   const W = Math.round((TANK_H * widthPx) / heightPx)
-  const source = tankSvg(s, {
-    isMotion: !s.settings.reduceMotion,
-    showCoins: s.settings.showCoins,
-    showBubbles: s.settings.showBubbles,
-    selectedId: selected,
-    now: d.now,
-    width: W,
-  })
+  // The band is drawn again whenever any plugin's band changes (pillbar samples
+  // every few seconds). The same drawing is handed back while nothing of the
+  // tank changed, so the Desktop keeps the image and its animation running
+  // instead of swapping (and flashing) it.
+  const live = s.fish.some(f => (f.state === 'spitCoin' && d.now - f.since < 15000) || (f.state === 'startled' && d.now - f.since < 1100)) || s.pellets.some(p => d.now - p.at < PELLET_SHOW_MS)
+  const key = [s.revision, W, widthPx, heightPx, selected ?? '', s.settings.theme, s.settings.showCoins, s.settings.showBubbles, s.settings.reduceMotion, live, s.fish.map(f => `${f.id}:${f.state}:${f.hunger < 25}`).join(',')].join('|')
+  let drawing = tankCache
+  if (!drawing || drawing.key !== key) {
+    drawing = {
+      key,
+      renderedAt: d.now,
+      source: tankSvg(s, {
+        isMotion: !s.settings.reduceMotion,
+        showCoins: s.settings.showCoins,
+        showBubbles: s.settings.showBubbles,
+        selectedId: selected,
+        now: d.now,
+        width: W,
+      }),
+    }
+    tankCache = drawing
+  }
+  const source = drawing.source
+  const renderedAt = drawing.renderedAt
   const cols = Math.max(20, d.columns)
   const rows = Math.max(3, Math.round(heightPx / PX_PER_ROW))
   // The tap grid: invisible plain buttons over the water, TAP_W columns wide
@@ -243,7 +262,7 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
       const Y = ((r + 0.5) / rows) * TANK_H
       taps.push(
         <Box key={`tap-${c}-${r}`} position="absolute" left={c * TAP_W} top={r}>
-          <Button key={`tap-${c}-${r}`} plain onPress={() => void tapTank($, X, Y, W, d.now)}>{TAP_LABEL}</Button>
+          <Button key={`tap-${c}-${r}`} plain onPress={() => void tapTank($, X, Y, W, renderedAt)}>{TAP_LABEL}</Button>
         </Box>,
       )
     }
