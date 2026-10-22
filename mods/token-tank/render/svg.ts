@@ -47,10 +47,9 @@ function symbols(name: string, anim: string): string {
   if (!sprite) return ''
   const frames = sprite.frames[anim] ?? sprite.frames[Object.keys(sprite.frames)[0] ?? '']
   if (!frames) return ''
-  const pngs = sprite.png?.[anim] ?? sprite.png?.[Object.keys(sprite.png ?? {})[0] ?? ''] ?? []
-  // A frame is one small PNG (a few hundred bytes) rather than hundreds of path runs.
+  // Paths, not embedded PNGs: the Desktop's sandboxed frame strips <image>.
   return frames
-    .map((f, i) => `<symbol id="${name}-${anim}-${i}" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${sprite.w}" height="${sprite.h}">${pngs[i] ? `<image href="${pngs[i]}" width="${sprite.w}" height="${sprite.h}" style="image-rendering:pixelated"/>` : framePaths(f)}</symbol>`)
+    .map((f, i) => `<symbol id="${name}-${anim}-${i}" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${sprite.w}" height="${sprite.h}">${framePaths(f)}</symbol>`)
     .join('')
 }
 
