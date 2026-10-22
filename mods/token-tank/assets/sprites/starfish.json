@@ -1,0 +1,131 @@
+{
+  "name": "starfish",
+  "w": 14,
+  "h": 14,
+  "palette": {
+    "A": "#f05a3c",
+    "B": "#ff9a4f",
+    "C": "#8e2637",
+    "D": "#ffd27a"
+  },
+  "frames": {
+    "idle": [
+      [
+        "......C.......",
+        ".....CAC......",
+        "..C..CAAC.....",
+        "...CCAAACC....",
+        "....CAABBBCC..",
+        "CCCCABBAAAACC.",
+        ".CAAAAAACACCC.",
+        "..CABBAAAAC...",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......",
+        ".............."
+      ]
+    ],
+    "swim": [
+      [
+        "......C.......",
+        ".....CAC......",
+        ".C...CAAC.....",
+        "..CCCAAACC....",
+        "CCC.CAABBBCC..",
+        "...CABBAAAACC.",
+        "....AAAAACACC.",
+        "...CABBAAAAC..",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......",
+        ".............."
+      ],
+      [
+        "..............",
+        "......C.......",
+        ".....CAC......",
+        ".....CAAC.....",
+        "....CAAACC....",
+        "....CAABBBCC..",
+        "CCCCABBAAAACC.",
+        ".CAAAAAACACCC.",
+        "..CABBAAAAC...",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......"
+      ],
+      [
+        "......C.......",
+        ".....CAC......",
+        ".....CAAC.....",
+        "....CAAACC....",
+        "....CAABBBCC..",
+        "...CABBAAAACC.",
+        "CCC.AAAAACACC.",
+        ".CCABBAAAAC...",
+        "C..CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......",
+        ".............."
+      ],
+      [
+        "..............",
+        "......C.......",
+        ".....CAC......",
+        ".....CAAC.....",
+        "....CAAACC....",
+        "....CAABBBCC..",
+        "CCCCABBAAAACC.",
+        ".CAAAAAACACCC.",
+        "..CABBAAAAC...",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......"
+      ]
+    ],
+    "spit": [
+      [
+        "......C.......",
+        ".....CAC......",
+        "..C..CAAC.....",
+        "...CCAAACC....",
+        "....CAABBBCCC.",
+        "CCCCABBAAAAC.C",
+        ".CAAAAAACACC.C",
+        "..CABBAAAACCC.",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......",
+        ".............."
+      ],
+      [
+        "......C.......",
+        ".....CAC......",
+        "..C..CAAC.....",
+        "...CCAAACC....",
+        "....CAABBBCC..",
+        "CCCCABBAAAACCD",
+        ".CAAAAAACACCC.",
+        "..CABBAAAAC...",
+        "...CAAAAAC....",
+        "...CABAAAC....",
+        "..CACCAAC.....",
+        ".CAC..CAC.....",
+        "CC....CC......",
+        ".............."
+      ]
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "token-tank",
+  "version": "0.2.0",
+  "description": "A pixel-art aquarium in a pane: Claude's work feeds the fish, the fish spit coins, you collect them and grow the tank.",
+  "types": "./types/index.d.ts",
+  "author": { "name": "Sheldon Chang" },
+  "license": "MIT"
+}

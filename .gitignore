@@ -1,1 +1,3 @@
 .DS_Store
+mods/*/assets/tools/codex*.log
+mods/*/assets/preview/

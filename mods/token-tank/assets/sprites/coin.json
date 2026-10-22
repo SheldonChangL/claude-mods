@@ -1,0 +1,72 @@
+{
+  "name": "coin",
+  "w": 12,
+  "h": 12,
+  "palette": {
+    "A": "#7a3f08",
+    "B": "#c87308",
+    "C": "#f2ad12",
+    "D": "#ffd84a",
+    "E": "#fff19a"
+  },
+  "frames": {
+    "spin": [
+      [
+        "....AAAA....",
+        "..AABBBBAA..",
+        ".ABCDDDDDBA.",
+        ".ACDEEDDDCA.",
+        "ABDEEDDDDCBA",
+        "ABDDDDDDDCBA",
+        "ABDDDDDDDCBA",
+        "ABCDDDDDCCBA",
+        ".ACCCCCCCBA.",
+        ".ABBBBBBBBA.",
+        "..AABBBBAA..",
+        "....AAAA...."
+      ],
+      [
+        ".....AAA....",
+        "....ABBBA...",
+        "...ABDDDCA..",
+        "...ACEDDCBA.",
+        "..ABEDDDCBA.",
+        "..ABDDDDCBA.",
+        "..ABDDDDCBA.",
+        "..ABCDDDCBA.",
+        "...ACCCCBA..",
+        "...ABBBBBA..",
+        "....ABBBA...",
+        ".....AAA...."
+      ],
+      [
+        ".....AA.....",
+        "....ABBA....",
+        "....ABBA....",
+        "....ACBA....",
+        "....ACBA....",
+        "....ACBA....",
+        "....ACBA....",
+        "....ACBA....",
+        "....ABBA....",
+        "....ABBA....",
+        "....ABBA....",
+        ".....AA....."
+      ],
+      [
+        "....AAA.....",
+        "...ABBBA....",
+        "..ACDDDDBA..",
+        ".ABCDDEDC...",
+        ".ABCDDDDEBA.",
+        ".ABCDDDDDBA.",
+        ".ABCDDDDDBA.",
+        ".ABCDDDDCBA.",
+        "..ABCCCCA...",
+        "..ABBBBBA...",
+        "...ABBBA....",
+        "....AAA....."
+      ]
+    ]
+  }
+}

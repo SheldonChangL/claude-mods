@@ -1,0 +1,119 @@
+{
+  "name": "shell",
+  "w": 16,
+  "h": 12,
+  "palette": {
+    "A": "#59333d",
+    "B": "#f3cf7a",
+    "C": "#fff0b5",
+    "D": "#d78e55",
+    "E": "#bd4658",
+    "F": "#7ce8f2"
+  },
+  "frames": {
+    "idle": [
+      [
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBBAE",
+        "..ADDDDDDDDDAAA.",
+        "...AADDDBBBA....",
+        "....AAABBBA.....",
+        "......AAA.......",
+        "................"
+      ]
+    ],
+    "swim": [
+      [
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        "ADDBDDBDDBBBBAE.",
+        ".ADDDDDDDDDAAA..",
+        "..AADDDBBBA.....",
+        "...AAABBBA......",
+        ".AAA..AAA.......",
+        "................"
+      ],
+      [
+        "................",
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBBAE",
+        "..ADDDDDDDDDAAA.",
+        "...AADDDBBBA....",
+        "....AAABBBA.....",
+        "......AAA......."
+      ],
+      [
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBBAE",
+        "..ADDDDDDDDDAAA.",
+        "...AADDDBBBA....",
+        "....AAABBBA.....",
+        "......AAA..AAA..",
+        "................"
+      ],
+      [
+        "................",
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBBAE",
+        "..ADDDDDDDDDAAA.",
+        "...AADDDBBBA....",
+        "....AAABBBA.....",
+        "......AAA......."
+      ]
+    ],
+    "spit": [
+      [
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBAAE",
+        "..ADDDDDDDDDAAEA",
+        "...AADDDBBBA.AA.",
+        "....AAABBBA.....",
+        "......AAA.......",
+        "................"
+      ],
+      [
+        "................",
+        "......AAAA......",
+        "....AACCCCAA....",
+        "...ACBCBCBCCA...",
+        "..ACBCBCBCBBAA..",
+        ".ABBBBBBBBBBBBA.",
+        ".ADDBDDBDDBBBAAE",
+        "..ADDDDDDDDDAAEA",
+        "...AADDDBBBA.AA.",
+        "....AAABBBA....F",
+        "......AAA.......",
+        "................"
+      ]
+    ]
+  }
+}

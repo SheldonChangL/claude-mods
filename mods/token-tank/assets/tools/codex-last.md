@@ -1,0 +1,1 @@
+Created and validated `sprites/arowana.json`.
