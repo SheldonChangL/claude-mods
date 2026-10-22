@@ -308,7 +308,11 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
     }
     tankCache = drawing
   }
-  const source = drawing.source
+  const mode = s.settings.renderMode
+  // The tiny test: a 1 KB drawing with one moving dot, to tell size from mechanism.
+  const source = mode === 'tiny'
+    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${TANK_H}" width="${W}" height="${TANK_H}"><rect width="${W}" height="${TANK_H}" fill="#14456e"/><circle cy="90" r="8" fill="#ffd166"><animate attributeName="cx" values="20;${W - 20};20" dur="8s" begin="${(-((d.now / 1000) % 8)).toFixed(2)}s" repeatCount="indefinite"/></circle></svg>`
+    : drawing.source
   const renderedAt = drawing.renderedAt
   const cols = Math.max(20, d.columns)
   const rows = Math.max(3, Math.round(heightPx / PX_PER_ROW))
@@ -330,7 +334,7 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
   return (
     <Box key="tank" flexDirection="column" width="100%">
       <Box key="tank-image">
-        {Svg({ source, alt: tr(d.lang, 'tankAlt') + s.fish.map(f => f.name).join(d.lang === 'zh' ? '、' : ', '), width: widthPx, height: heightPx })}
+        {Svg({ source, alt: tr(d.lang, 'tankAlt') + s.fish.map(f => f.name).join(d.lang === 'zh' ? '、' : ', '), width: widthPx, height: heightPx, isInteractive: mode === 'frame' ? true : undefined })}
       </Box>
       {taps}
       {piles(s, W).map(p => (
@@ -655,6 +659,11 @@ function settingsView($: EngineInterface, d: Draw): RenderElement {
       {group(tr(d.lang, 'tankHeight'), (
         <Box flexDirection="row" gap={2} flexWrap="wrap">
           {(['s', 'm', 'l'] as const).map(size => choice(d, `size-${size}`, tr(d.lang, size === 's' ? 'sizeS' : size === 'm' ? 'sizeM' : 'sizeL'), s.settings.tankSize === size, () => set({ tankSize: size })))}
+        </Box>
+      ))}
+      {group(tr(d.lang, 'renderMode'), (
+        <Box flexDirection="row" gap={2} flexWrap="wrap">
+          {(['image', 'frame', 'tiny'] as const).map(m => choice(d, `mode-${m}`, tr(d.lang, m === 'image' ? 'modeImage' : m === 'frame' ? 'modeFrame' : 'modeTiny'), s.settings.renderMode === m, () => set({ renderMode: m })))}
         </Box>
       ))}
       {group(tr(d.lang, 'language'), (
