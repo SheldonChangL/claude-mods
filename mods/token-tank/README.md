@@ -1,5 +1,7 @@
 # Token Tank 代幣魚缸
 
+![The tank above the prompt while Claude works, pillbar beneath it](docs/images/band-en.png)
+
 A pixel-art aquarium that lives in a Claude Code pane. Claude's work feeds the
 fish: every turn's token usage becomes energy, the fish turn energy into coins,
 and successful edits, passing tests and git commits pay a little extra. You

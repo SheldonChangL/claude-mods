@@ -11,6 +11,8 @@ Mods for Claude Code (CLI and the Desktop app's Code tab), each in its own folde
 
 pillbar, clawd-run and token-tank share the band above the prompt and stack instead of replacing each other.
 
+![token-tank above the prompt, pillbar beneath](mods/token-tank/docs/images/band-en.png)
+
 ## Install
 
 From a terminal session of Claude Code, one line per mod (`y` to add the marketplace, then pick a scope):
