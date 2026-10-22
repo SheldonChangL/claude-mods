@@ -403,88 +403,140 @@ const COL_PRICE = 8
 /** Locked species shown in the shop: the next few to unlock; the rest are one line. */
 const LOCKED_SHOWN = 2
 
+/** How wide one shop card is, in cells, and how many fit a row. */
+const CARD_W = 24
+function cardsPerRow(columns: number): number {
+  if (columns >= CARD_W * 4 + 6) return 4
+  if (columns >= CARD_W * 3 + 4) return 3
+  if (columns >= CARD_W * 2 + 2) return 2
+  return 1
+}
+
+/** A species' rarity, by how many fish the tank must hold before the shop lists it. */
+function rarityKey(unlockAt: number): 'rarity0' | 'rarity1' | 'rarity2' | 'rarity3' {
+  return unlockAt <= 1 ? 'rarity0' : unlockAt <= 4 ? 'rarity1' : unlockAt <= 6 ? 'rarity2' : 'rarity3'
+}
+
+type Card = {
+  key: string
+  /** The tile's SVG, or null for a mystery. */
+  art: ((px: number) => string) | null
+  name: string
+  sub: string
+  price: number
+  /** The action link, or the dim words that stand in for it. */
+  action: { key: string; label: string; onPress: () => void } | string
+}
+
+/** One product: a vertical card in a grid, or a horizontal strip when only one fits a row. */
+function productCard(d: Draw, c: Card, perRow: number): RenderElement {
+  const { Box, Text } = d.el
+  const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
+  const showArt = d.surface !== 'terminal' && Svg
+  const action = typeof c.action === 'string' ? <Text dimColor>{c.action}</Text> : link(d, c.action.key, `${c.action.label} ›`, c.action.onPress)
+  if (perRow === 1) {
+    const tile = 64
+    return (
+      <Box key={c.key} flexDirection="row" gap={2} alignItems="center" borderStyle="round" borderDimColor paddingX={1}>
+        <Box width={9} alignItems="center">
+          {c.art && showArt && Svg ? Svg({ source: c.art(tile), alt: c.name, width: tile, height: Math.round(tile * 0.72) }) : <Text dimColor>{c.art ? '🐟' : '?'}</Text>}
+        </Box>
+        <Box flexDirection="column" flexGrow={1}>
+          <Text weight="semibold" wrap="truncate-end">{c.name}</Text>
+          <Text dimColor wrap="truncate-end">{c.sub}</Text>
+          <Box flexDirection="row" gap={2} alignItems="center">
+            <Text color="yellow">🪙 {c.price}</Text>
+            {action}
+          </Box>
+        </Box>
+      </Box>
+    )
+  }
+  const tile = 120
+  return (
+    <Box key={c.key} flexDirection="column" alignItems="center" gap={0} width={CARD_W} borderStyle="round" borderDimColor paddingX={1} paddingY={0}>
+      {c.art && showArt && Svg ? Svg({ source: c.art(tile), alt: c.name, width: tile, height: Math.round(tile * 0.72) }) : <Text dimColor>{c.art ? '🐟' : '?'}</Text>}
+      <Text weight="semibold" wrap="truncate-end">{c.name}</Text>
+      <Text dimColor wrap="truncate-end">{c.sub}</Text>
+      <Text color="yellow" weight="semibold">🪙 {c.price}</Text>
+      {action}
+    </Box>
+  )
+}
+
 function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   const { Box, Text } = d.el
   const s = d.state
-  const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
-  const showArt = d.surface !== 'terminal' && Svg
+  const perRow = cardsPerRow(d.columns)
   const tabs: [ShopTab, string][] = [['fish', tr(d.lang, 'shopFish')], ['decor', tr(d.lang, 'shopDecor')], ['food', tr(d.lang, 'shopFood')]]
-  const price = (n: number, isOff = false) => (
-    <Box width={COL_PRICE}>
-      <Text color={isOff ? undefined : 'yellow'} dimColor={isOff}>🪙 {n}</Text>
-    </Box>
-  )
-  let body: RenderElement
+  let cards: Card[] = []
+  let footer: RenderElement | null = null
   if (tab === 'fish') {
     const list = shopList(s)
     const lockedAll = list.filter(x => !x.isUnlocked)
     const shown = list.filter(x => x.isUnlocked).concat(lockedAll.slice(0, LOCKED_SHOWN))
     const hidden = lockedAll.length - Math.min(LOCKED_SHOWN, lockedAll.length)
-    body = (
-      <Box flexDirection="column" gap={1}>
-        {shown.map(({ species, isUnlocked, canAfford }) => {
-          const sp = SPECIES[species]
-          return (
-            <Box key={`shop-${species}`} flexDirection="row" gap={1} alignItems="center">
-              <Box width={COL_THUMB} alignItems="center">
-                {!isUnlocked ? <Text dimColor>?</Text> : showArt && Svg ? Svg({ source: fishPortraitSvg(species, 30), alt: speciesName(sp, d.lang), width: 30, height: 22 }) : <Text>🐟</Text>}
-              </Box>
-              <Box width={COL_NAME}>
-                <Text dimColor={!isUnlocked} wrap="truncate-end">{isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery')}</Text>
-              </Box>
-              {price(sp.price, !isUnlocked || !canAfford)}
-              {isUnlocked ? (
-                link(d, `buy-${species}`, `${tr(d.lang, 'buy')} ›`, () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)), !canAfford)
-              ) : (
-                <Text dimColor wrap="truncate-end">{tr(d.lang, 'lockedAt', { n: sp.unlockAt })}</Text>
-              )}
-            </Box>
-          )
-        })}
-        {hidden > 0 && <Text dimColor wrap="wrap">{tr(d.lang, 'moreLocked', { n: hidden })}</Text>}
-      </Box>
-    )
+    cards = shown.map(({ species, isUnlocked, canAfford }) => {
+      const sp = SPECIES[species]
+      return {
+        key: `shop-${species}`,
+        art: isUnlocked ? (px: number) => fishPortraitSvg(species, px, true) : null,
+        name: isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery'),
+        sub: `${tr(d.lang, rarityKey(sp.unlockAt))} · ${tr(d.lang, 'rateShort', { r: sp.rate.toFixed(1) })}`,
+        price: sp.price,
+        action: !isUnlocked
+          ? tr(d.lang, 'lockedAt', { n: sp.unlockAt })
+          : !canAfford
+            ? tr(d.lang, 'notEnough')
+            : { key: `buy-${species}`, label: tr(d.lang, 'buy'), onPress: () => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined)) },
+      }
+    })
+    if (hidden > 0) footer = <Text dimColor wrap="wrap">{tr(d.lang, 'moreLocked', { n: hidden })}</Text>
   } else if (tab === 'decor') {
     const kinds = (Object.keys(DECOR) as DecorId[]).sort((a, b) => DECOR[a].price - DECOR[b].price)
-    body = (
-      <Box flexDirection="column" gap={1}>
-        {kinds.map(kind => {
-          const have = s.decorations.filter(x => x.kind === kind).length
-          const canAfford = s.coins >= DECOR[kind].price
-          return (
-            <Box key={`shop-${kind}`} flexDirection="row" gap={1} alignItems="center">
-              <Box width={COL_THUMB} alignItems="center">{showArt && Svg ? Svg({ source: decorPortraitSvg(kind, 30), alt: decorName(kind, d.lang), width: 30, height: 30 }) : <Text>🪸</Text>}</Box>
-              <Box width={COL_NAME}>
-                <Text wrap="truncate-end">{decorName(kind, d.lang)}{have > 0 ? <Text dimColor> ×{have}</Text> : null}</Text>
-              </Box>
-              {price(DECOR[kind].price, !canAfford)}
-              {link(d, `buy-${kind}`, `${tr(d.lang, 'place')} ›`, () => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`)), !canAfford)}
-            </Box>
-          )
-        })}
-        <Text dimColor>{tr(d.lang, 'decorCount', { n: s.decorations.length, max: MAX_DECOR })}</Text>
-      </Box>
-    )
+    cards = kinds.map(kind => {
+      const have = s.decorations.filter(x => x.kind === kind).length
+      const canAfford = s.coins >= DECOR[kind].price
+      return {
+        key: `shop-${kind}`,
+        art: (px: number) => decorPortraitSvg(kind, px, true),
+        name: decorName(kind, d.lang),
+        sub: tr(d.lang, 'owned', { n: have }),
+        price: DECOR[kind].price,
+        action: !canAfford ? tr(d.lang, 'notEnough') : { key: `buy-${kind}`, label: tr(d.lang, 'place'), onPress: () => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`)) },
+      }
+    })
+    footer = <Text dimColor>{tr(d.lang, 'decorCount', { n: s.decorations.length, max: MAX_DECOR })}</Text>
   } else {
-    body = (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1} alignItems="center">
-          <Box width={COL_THUMB} alignItems="center"><Text>🍤</Text></Box>
-          <Box width={COL_NAME}><Text>{tr(d.lang, 'foodWord')}<Text dimColor> ×{s.food}</Text></Text></Box>
-          {price(FOOD_PRICE)}
-          {link(d, 'buy-food-1', `${tr(d.lang, 'buyFood1')} ›`, () => void commit($, st => buyFood(st, 1)), s.coins < FOOD_PRICE)}
-          {link(d, 'buy-food-10', `${tr(d.lang, 'buyFood10')} ›`, () => void commit($, st => buyFood(st, 10)), s.coins < FOOD_PRICE * 10)}
-        </Box>
-        <Text dimColor wrap="wrap">{tr(d.lang, 'foodHelp')}</Text>
-      </Box>
-    )
+    cards = [
+      {
+        key: 'shop-food-1',
+        art: (px: number) => decorPortraitSvg('pellet', px, true),
+        name: tr(d.lang, 'foodWord'),
+        sub: tr(d.lang, 'foodStock', { n: s.food }),
+        price: FOOD_PRICE,
+        action: s.coins < FOOD_PRICE ? tr(d.lang, 'notEnough') : { key: 'buy-food-1', label: tr(d.lang, 'buyFood1'), onPress: () => void commit($, st => buyFood(st, 1)) },
+      },
+      {
+        key: 'shop-food-10',
+        art: (px: number) => decorPortraitSvg('pellet', px, true),
+        name: `${tr(d.lang, 'foodWord')} ×10`,
+        sub: tr(d.lang, 'foodStock', { n: s.food }),
+        price: FOOD_PRICE * 10,
+        action: s.coins < FOOD_PRICE * 10 ? tr(d.lang, 'notEnough') : { key: 'buy-food-10', label: tr(d.lang, 'buyFood10'), onPress: () => void commit($, st => buyFood(st, 10)) },
+      },
+    ]
+    footer = <Text dimColor wrap="wrap">{tr(d.lang, 'foodHelp')}</Text>
   }
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="row" gap={3} flexWrap="wrap">
         {tabs.map(([id, label]) => (tab === id ? <Text weight="semibold">{label}</Text> : link(d, `tab-${id}`, label, () => void update($, shopTab, () => id))))}
       </Box>
-      {body}
+      <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
+        {cards.map(c => productCard(d, c, perRow))}
+      </Box>
+      {footer}
     </Box>
   )
 }

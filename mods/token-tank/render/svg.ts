@@ -363,20 +363,33 @@ export function tankSvg(state: GameState, o: TankOptions): string {
 }
 
 /** One decoration, first frame, for the shop. */
-export function decorPortraitSvg(kind: string, px: number): string {
+export function decorPortraitSvg(kind: string, px: number, tile = false): string {
   const sprite = SPRITES[kind]
   if (!sprite) return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}"/>`
-  const anim = Object.keys(sprite.frames)[0] ?? ''
+  const anim = decorAnim(kind)
   const frame = sprite.frames[anim]?.[0] ?? []
+  if (tile) return tileSvg(frame, sprite.w, sprite.h, px, Math.round(px * 0.72))
   const scale = Math.min(px / sprite.w, px / sprite.h)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${Math.round(sprite.w * scale)}" height="${Math.round(sprite.h * scale)}" shape-rendering="crispEdges">${framePaths(frame)}</svg>`
 }
 
+/** A sprite centred on a light rounded tile of `w` × `h` CSS pixels, for a shop card. */
+function tileSvg(frame: SpriteFrame, sw: number, sh: number, w: number, h: number): string {
+  const pad = 6
+  const scale = Math.min((w - pad * 2) / sw, (h - pad * 2) / sh)
+  const dw = sw * scale
+  const dh = sh * scale
+  const x = (w - dw) / 2
+  const y = (h - dh) / 2
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="10" fill="#f3f1ec"/><g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" shape-rendering="crispEdges">${framePaths(frame)}</g></svg>`
+}
+
 /** One fish, first swim frame, for a card or a list row. */
-export function fishPortraitSvg(species: string, px: number): string {
+export function fishPortraitSvg(species: string, px: number, tile = false): string {
   const sprite = SPRITES[species]
   if (!sprite) return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}"/>`
   const frame = sprite.frames.swim?.[0] ?? []
+  if (tile) return tileSvg(frame, sprite.w, sprite.h, px, Math.round(px * 0.72))
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sprite.w} ${sprite.h}" width="${px}" height="${Math.round((px * sprite.h) / sprite.w)}" shape-rendering="crispEdges">${framePaths(frame)}</svg>`
 }
 

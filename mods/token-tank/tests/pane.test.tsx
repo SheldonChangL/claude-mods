@@ -96,8 +96,9 @@ test('the narrow pane sells a fish, feeds it and flips a setting', async ($, on)
   // A new game holds 150 coins: a guppy (80) is affordable, a second one is not.
   await ui.press({ key: 'buy-guppy' })
   expect(await ui.find({ type: 'Text', text: /🐟 3\/10/ })).toBeDefined()
-  await ui.press({ key: 'buy-guppy' })
-  expect(await ui.find({ type: 'Text', text: /金幣不夠/ })).toBeDefined()
+  // With 70 coins left the guppy card offers no button, only the words.
+  expect(await ui.find({ type: 'Button', key: 'buy-guppy' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /金幣不足/ })).toBeDefined()
   // Locked species show no name or art.
   expect(await ui.find({ type: 'Text', text: /錦鯉/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /？？？/ })).toBeDefined()
