@@ -127,6 +127,8 @@ test('a passing test command pays a reward once per cooldown', async ($, on) => 
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
   // @ts-ignore
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  // Rewards are paid when the turn ends.
+  await turnDone($, 'reward-turn', { ...USAGE, input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0 })
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'nav-settings' })

@@ -192,6 +192,9 @@ async function tapTank($: EngineInterface, X: number, Y: number, W: number, rend
   })
 }
 
+/** Rewards earned by tool calls in the running turn, paid at its end (module memory). */
+const pendingRewards: RewardKind[] = []
+
 /** The last tank drawing, reused while nothing of the tank changed (module memory; a reload starts over). */
 let tankCache: { key: string; source: string; renderedAt: number } | null = null
 
@@ -325,8 +328,10 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
     }
   }
   return (
-    <Box flexDirection="column" width="100%">
-      {Svg({ source, alt: tr(d.lang, 'tankAlt') + s.fish.map(f => f.name).join(d.lang === 'zh' ? '、' : ', '), width: widthPx, height: heightPx })}
+    <Box key="tank" flexDirection="column" width="100%">
+      <Box key="tank-image">
+        {Svg({ source, alt: tr(d.lang, 'tankAlt') + s.fish.map(f => f.name).join(d.lang === 'zh' ? '、' : ', '), width: widthPx, height: heightPx })}
+      </Box>
       {taps}
       {piles(s, W).map(p => (
         <Box key={`pile-${p.fishId}`} position="absolute" left={Math.min(cols - 5, Math.round((p.x / W) * cols))} bottom={1}>
@@ -345,7 +350,7 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
   const hungry = s.fish.filter(f => f.hunger < 25).length
   const last = s.log[s.log.length - 1]
   return (
-    <Box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
+    <Box key="token-tank-row" flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
       <Text color="yellow">🪙 {fmt(s.coins)}</Text>
       <Text dimColor={pending === 0}>{pending > 0 ? tr(d.lang, 'coinsOnFloor', { n: pending }) : tr(d.lang, 'accumulating')}</Text>
       <Text dimColor>{s.fish.some(f => f.hunger < FULL_ENOUGH) ? tr(d.lang, 'tapToFeed', { n: s.food }) : tr(d.lang, 'allFull', { n: s.food })}</Text>
@@ -734,7 +739,16 @@ export const register: Register = on => {
     if (e.agentId !== undefined) return done
     const usage = e.usage
     const effective = effectiveTokens(usage)
-    const events = await commit($, (st, now) => applyTurn(st, { turnId: e.turnId, usage, now }))
+    const rewards = pendingRewards.splice(0)
+    const events = await commit($, (st, now) => {
+      let out = applyTurn(st, { turnId: e.turnId, usage, now })
+      // The turn's rewards, each under its own cooldown, in one write.
+      for (const kind of rewards) {
+        const paid = reward(out.state, { kind, now })
+        out = { state: paid.state, events: [...out.events, ...paid.events] }
+      }
+      return out
+    })
     const minted = events.filter(ev => ev.kind === 'minted').reduce((n, ev) => n + (ev.kind === 'minted' ? ev.coins : 0), 0)
     const now = await $.clock.now()
     const L = await langNow($, await read($, game))
@@ -746,12 +760,14 @@ export const register: Register = on => {
     return done
   })
 
+  // Rewards wait for the end of the turn: one write and one redraw per turn,
+  // not one per tool call (every band redraw costs the Desktop a repaint).
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     if (e.agentId !== undefined) return ran
     const command = e.tool === 'Bash' ? (e as { command?: string }).command : undefined
     const kind = rewardFor(e.tool, command, Boolean((ran as { isError?: boolean }).isError) || 'deny' in ran)
-    if (kind) await commit($, (st, now) => reward(st, { kind, now }))
+    if (kind) pendingRewards.push(kind)
     return ran
   })
 
@@ -771,7 +787,7 @@ export const register: Register = on => {
     // The tank sits above whatever the plugins beneath draw (pillbar hugs the prompt).
     const below = await next(e)
     return (
-      <Box flexDirection="column">
+      <Box key="token-tank-stack" flexDirection="column">
         {tankBlock($, d, ASPECT[state.settings.tankSize], null)}
         {bandRow($, d, note)}
         {below}
