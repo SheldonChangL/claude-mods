@@ -321,7 +321,7 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
       return `${f.id}:${f.species}:${f.name}:${f.hunger < 25 ? 'h' : ''}:${f.pending}:${spitting ? 's' : ''}${startled ? 'd' : ''}`
     })
     .join(',')
-  const decorKey = s.decorations.map(x => `${x.kind}@${x.x}`).join(',')
+  const decorKey = s.decorations.map(x => `${x.id}:${x.kind}@${x.x},${x.y}`).join(",")
   const pelletKey = s.pellets.filter(p => d.now - p.at < PELLET_SHOW_MS).map(p => p.id).join(',')
   const key = [W, widthPx, heightPx, selected ?? '', s.settings.theme, s.settings.showCoins, s.settings.showBubbles, s.settings.reduceMotion, s.settings.tankSize, fishKey, decorKey, pelletKey].join('|')
   let drawing = tankCache
