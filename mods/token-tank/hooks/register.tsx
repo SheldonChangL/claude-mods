@@ -94,6 +94,20 @@ async function langNow($: EngineInterface, state: GameState | null): Promise<Lan
   return read($, lang)
 }
 
+/** How often a session looks for another session's newer save. */
+const SYNC_MS = 10_000
+
+/** Takes the store's game when another session has written a newer revision. */
+async function syncFromStore($: EngineInterface): Promise<void> {
+  const mine = await read($, game)
+  if (!mine) return
+  const raw = await storeGet($)
+  if (raw === undefined) return
+  const now = await $.clock.now()
+  const stored = migrate(raw, now).state
+  if (stored.revision > mine.revision) await update($, game, () => stored)
+}
+
 async function load($: EngineInterface): Promise<GameState> {
   const now = await $.clock.now()
   const raw = await storeGet($)
@@ -707,6 +721,10 @@ export const register: Register = on => {
     await update($, lang, () => L)
     await $.command.register({ name: 'fish', description: tr(L, 'cmdDescription') })
     await load($)
+    // Every session shares the save: pick up what another session wrote.
+    $.clock.every(SYNC_MS, () => {
+      void syncFromStore($)
+    })
     return next(e)
   })
 
@@ -746,6 +764,9 @@ export const register: Register = on => {
     const done = await next(e)
     // Only the main loop pays: a subagent's usage is part of the same work.
     if (e.agentId !== undefined) return done
+    // The band's "long turn" flag ends with the turn, so the next prompt does
+    // not show the tank for an instant before its own turn.start resets it.
+    await update($, turn, () => null)
     const usage = e.usage
     const effective = effectiveTokens(usage)
     const rewards = pendingRewards.splice(0)
