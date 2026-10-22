@@ -32,14 +32,14 @@ function uniqueId(base: string, taken: Set<string>): string {
   return `${base}-${n}`
 }
 
-export function buyFish(state: GameState, species: SpeciesId, now: number, idSeed: string): Outcome {
+export function buyFish(state: GameState, species: SpeciesId, now: number, idSeed: string, name?: string): Outcome {
   if (!isSpeciesId(species)) return refuse(state, 'unknown-species')
   if (!isUnlocked(state, species)) return refuse(state, 'locked')
   if (state.fish.length >= MAX_FISH) return refuse(state, 'tank-full')
   const price = SPECIES[species].price
   if (state.coins < price) return refuse(state, 'not-enough-coins')
 
-  const born = newFish(species, now, idSeed)
+  const born = newFish(species, now, idSeed, name)
   const fish = { ...born, id: uniqueId(born.id, new Set(state.fish.map((f) => f.id))) }
   const dex = state.dex.includes(species) ? state.dex : [...state.dex, species]
   const next = bump(state, { coins: state.coins - price, fish: [...state.fish, fish], dex }, now)

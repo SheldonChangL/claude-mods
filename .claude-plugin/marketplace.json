@@ -1,0 +1,29 @@
+{
+  "name": "claude-mods",
+  "description": "Mods for Claude Code: a usage band, a tamagotchi-style aquarium, a narrator pane and a platformer that plays while Claude works.",
+  "owner": {
+    "name": "Sheldon Chang"
+  },
+  "plugins": [
+    {
+      "name": "pillbar",
+      "source": "./mods/pillbar",
+      "description": "Capsule band above the prompt: 5-hour and weekly quota, context window, CPU, memory and disk"
+    },
+    {
+      "name": "clawd-run",
+      "source": "./mods/clawd-run",
+      "description": "While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt"
+    },
+    {
+      "name": "plain-narrator",
+      "source": "./mods/plain-narrator",
+      "description": "A narrator pane that explains in plain language what Claude is doing, with a side chat you can ask using the model you pick"
+    },
+    {
+      "name": "token-tank",
+      "source": "./mods/token-tank",
+      "description": "A pixel-art aquarium in a pane: Claude's work feeds the fish, the fish spit coins, you collect them and grow the tank."
+    }
+  ]
+}

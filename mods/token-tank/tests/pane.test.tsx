@@ -20,6 +20,7 @@ const turnDone = ($: any, turnId: string, usage = USAGE) => $.turn.complete({ tu
 function setup(on: any) {
   const clock = mock.clock(on, { now: 1_760_000_000_000 })
   mock.store(on)
+  mock.env(on, { LANG: 'zh_TW.UTF-8' })
   on('command.register', () => ({ value: { command: 'fish' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
@@ -146,5 +147,21 @@ test('a tap on the band drops food on open water and startles a fish on its lane
   await ui.press({ key: 'tap-14-0' })
   expect(await ui.find({ type: 'Text', text: /🍤 9/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /你撒了飼料/ })).toBeDefined()
+  await ui.unmount()
+})
+
+
+test('with a non-Chinese LANG the words are English and the first fish get English names', async ($, on) => {
+  mock.clock(on, { now: 1_760_000_000_000 })
+  mock.store(on)
+  mock.env(on, { LANG: 'en_US.UTF-8' })
+  on('command.register', () => ({ value: { command: 'fish' } }))
+  on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Token Tank/ })).toBeDefined()
+  await ui.press({ key: 'nav-fish' })
+  expect(await ui.find({ type: 'Text', text: /Clownfish Lv\.1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Feed all/ })).toBeDefined()
   await ui.unmount()
 })

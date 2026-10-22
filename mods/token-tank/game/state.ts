@@ -20,7 +20,7 @@ const TANK_SIZES: TankSize[] = ['s', 'm', 'l']
 const REWARD_KINDS: RewardKind[] = ['edit', 'test', 'commit']
 
 const DEFAULT_SETTINGS: Settings = {
-  theme: 'ocean', tankSize: 'm', showCoins: true, showBubbles: true, reduceMotion: false, showBand: true,
+  theme: 'ocean', tankSize: 'm', showCoins: true, showBubbles: true, reduceMotion: false, showBand: true, language: 'auto',
 }
 
 function emptyStats(now: number): Stats {
@@ -150,6 +150,7 @@ export function sanitize(raw: Obj, now: number): GameState {
     showBubbles: bool(st.showBubbles, DEFAULT_SETTINGS.showBubbles),
     reduceMotion: bool(st.reduceMotion, DEFAULT_SETTINGS.reduceMotion),
     showBand: bool(st.showBand, DEFAULT_SETTINGS.showBand),
+    language: oneOf(st.language, ['auto', 'zh', 'en'] as const, DEFAULT_SETTINGS.language),
   }
 
   const processedTurns = arr(raw.processedTurns)

@@ -13,6 +13,14 @@ export type SpeciesId =
   | 'butterflyfish'
   | 'lionfish'
   | 'arowana'
+  | 'discus'
+  | 'oscar'
+  | 'danio'
+  | 'moorishidol'
+  | 'parrotfish'
+  | 'mandarin'
+  | 'swordtail'
+  | 'mola'
 
 export type SpeciesSize = 's' | 'm' | 'l'
 
@@ -54,7 +62,7 @@ export type Fish = {
   since: number
 }
 
-export type DecorId = 'seaweed' | 'coral' | 'rock' | 'chest' | 'ruin' | 'anchor' | 'shell'
+export type DecorId = 'seaweed' | 'coral' | 'rock' | 'chest' | 'ruin' | 'anchor' | 'shell' | 'shipwreck' | 'anemone' | 'clam' | 'statue' | 'wheel'
 
 export type Decoration = {
   id: string
@@ -75,6 +83,8 @@ export type Settings = {
   reduceMotion: boolean
   /** Draw the tank above the prompt (where clawd-run used to run). */
   showBand: boolean
+  /** The words' language: follow Claude, or pinned. */
+  language: 'auto' | 'zh' | 'en'
 }
 
 export type Stats = {
@@ -166,6 +176,8 @@ declare module 'claude-code' {
       turn: { turnId: string; isLong: boolean } | null
       /** `/fish` keeps the band shown between turns. */
       isPinned: boolean
+      /** The language the words are drawn in this session. */
+      lang: 'zh' | 'en'
     }
   }
 }

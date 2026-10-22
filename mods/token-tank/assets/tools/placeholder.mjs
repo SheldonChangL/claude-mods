@@ -12,7 +12,7 @@ const fish = (w, h, body, dark, light, tailShift) => {
   put(rows, Math.round(cx + w * 0.15), Math.round(cy - 2), 'K')
   return rows
 }
-const species = { guppy: ['#58d3f7', '#1f6f9a', '#dff9ff', 32, 24], clownfish: ['#ff8c2b', '#a8420c', '#ffffff', 32, 24], angelfish: ['#d9dde8', '#3c3f55', '#ffffff', 40, 32], koi: ['#f7f1e6', '#c9452c', '#ffffff', 40, 32], puffer: ['#f2d046', '#8a6d10', '#fff6b0', 32, 24], tang: ['#2f6df6', '#15317a', '#f7d84a', 32, 24], goldfish: ['#ff9a2e', '#b4561a', '#ffe0a0', 32, 24], seahorse: ['#3fc9b0', '#1d6f61', '#ffb3d1', 24, 32], neon: ['#4fd1ff', '#1f4f8f', '#ff4d6d', 32, 24], betta: ['#c0392b', '#5b1a6e', '#ff8fa3', 40, 32], butterflyfish: ['#f5f0e6', '#b8651b', '#ffffff', 32, 24], lionfish: ['#c84b31', '#5a1e14', '#f6e7d8', 40, 32], arowana: ['#d4a017', '#7a1f1f', '#ffe9a8', 48, 24] }
+const species = { guppy: ['#58d3f7', '#1f6f9a', '#dff9ff', 32, 24], clownfish: ['#ff8c2b', '#a8420c', '#ffffff', 32, 24], angelfish: ['#d9dde8', '#3c3f55', '#ffffff', 40, 32], koi: ['#f7f1e6', '#c9452c', '#ffffff', 40, 32], puffer: ['#f2d046', '#8a6d10', '#fff6b0', 32, 24], tang: ['#2f6df6', '#15317a', '#f7d84a', 32, 24], goldfish: ['#ff9a2e', '#b4561a', '#ffe0a0', 32, 24], seahorse: ['#3fc9b0', '#1d6f61', '#ffb3d1', 24, 32], neon: ['#4fd1ff', '#1f4f8f', '#ff4d6d', 32, 24], betta: ['#c0392b', '#5b1a6e', '#ff8fa3', 40, 32], butterflyfish: ['#f5f0e6', '#b8651b', '#ffffff', 32, 24], lionfish: ['#c84b31', '#5a1e14', '#f6e7d8', 40, 32], arowana: ['#d4a017', '#7a1f1f', '#ffe9a8', 48, 24], discus: ['#3fb8c9', '#8a3a2a', '#ffe0b0', 40, 32], oscar: ['#3a3a2a', '#d9622b', '#ffb380', 40, 32], danio: ['#cfd8e3', '#1f3a6b', '#ffffff', 32, 24], moorishidol: ['#f4f1e8', '#1a1a2e', '#ffd166', 40, 32], parrotfish: ['#2fbf9f', '#1a6f8a', '#ff9fb0', 40, 32], mandarin: ['#ff8c42', '#1f7a8c', '#7fe0d8', 32, 24], swordtail: ['#ff5a36', '#8a1f14', '#ffd0a0', 32, 24], mola: ['#9aa5b1', '#4a5560', '#d8dee5', 48, 40] }
 const sprites = {}
 for (const [id, [body, dark, light, w, h]] of Object.entries(species)) {
   const palette = { A: body, B: dark, C: light, K: '#1a1a2e' }
@@ -31,5 +31,10 @@ sprites.ruin = { w: 40, h: 56, palette: { A: '#9aa3b5', B: '#55607a' }, frames: 
 sprites.anchor = { w: 24, h: 32, palette: { A: '#6b7280', B: '#374151' }, frames: { idle: [blob(24, 32, 'A', 'B')] } }
 sprites.shell = { w: 16, h: 12, palette: { A: '#ffe4c4', B: '#c48a5a' }, frames: { idle: [blob(16, 12, 'A', 'B')] } }
 sprites.starfish = { w: 14, h: 14, palette: { A: '#ff6b57', B: '#b03a2a' }, frames: { idle: [blob(14, 14, 'A', 'B')] } }
+sprites.shipwreck = { w: 64, h: 32, palette: { A: '#6b4a2b', B: '#3b2a18' }, frames: { idle: [blob(64, 32, 'A', 'B')] } }
+sprites.anemone = { w: 24, h: 20, palette: { A: '#ff8fa3', B: '#b03a5a' }, frames: { sway: [0, 0, 0, 0].map(() => blob(24, 20, 'A', 'B')) } }
+sprites.clam = { w: 20, h: 14, palette: { A: '#9ab8ff', B: '#4a3f8a' }, frames: { closed: [blob(20, 14, 'A', 'B')], open: [blob(20, 14, 'A', 'B'), blob(20, 14, 'A', 'B')] } }
+sprites.statue = { w: 24, h: 44, palette: { A: '#8f9aa5', B: '#4f5a65' }, frames: { idle: [blob(24, 44, 'A', 'B')] } }
+sprites.wheel = { w: 24, h: 24, palette: { A: '#a0622d', B: '#5c3312' }, frames: { idle: [blob(24, 24, 'A', 'B')] } }
 writeFileSync(new URL('../sprites.placeholder.json', import.meta.url), JSON.stringify({ sprites }))
 console.log('placeholder written')

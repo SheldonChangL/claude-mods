@@ -1,1 +1,1 @@
-Created and validated `sprites/arowana.json`.
+Created and validated `sprites/oscar.json`.

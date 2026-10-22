@@ -19,7 +19,8 @@ import { DECOR, FOOD_PRICE, SPECIES, SPECIES_LIST } from '../game/species'
 import { buyDecoration, buyFish, buyFood, MAX_DECOR, MAX_FISH, shopList } from '../game/shop'
 import { appendLog, mergeStates, migrate } from '../game/state'
 import { decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
-import { clock, describe, fmt, moodLine, refusalText } from './text'
+import { clock, decorName, describe, fmt, langOf, moodLine, refusalText, speciesName, tr } from './text'
+import type { Lang } from './text'
 
 const PANE = 'token-tank'
 const STORE_KEY = 'game'
@@ -35,6 +36,7 @@ const isRenaming = atom({ plugin: 'token-tank', key: 'isRenaming' } as const, fa
 const notice = atom({ plugin: 'token-tank', key: 'notice' } as const, null as string | null)
 const turn = atom({ plugin: 'token-tank', key: 'turn' } as const, null as { turnId: string; isLong: boolean } | null)
 const isPinned = atom({ plugin: 'token-tank', key: 'isPinned' } as const, false)
+const lang = atom({ plugin: 'token-tank', key: 'lang' } as const, 'zh' as Lang)
 
 // ---------------------------------------------------------------- persistence
 
@@ -55,10 +57,44 @@ async function storeSet($: EngineInterface, key: string, value: unknown): Promis
   }
 }
 
+/** Claude's language: the `language` setting in ~/.claude/settings.json, else the shell's LANG. */
+async function detectLang($: EngineInterface): Promise<Lang> {
+  let setting: string | undefined
+  try {
+    const home = await $.env.get('HOME')
+    if (home) {
+      const text = await $.fs.read(`${home}/.claude/settings.json`)
+      const parsed = JSON.parse(text) as { language?: unknown }
+      if (typeof parsed.language === 'string') setting = parsed.language
+    }
+  } catch {
+    // no settings file to read here
+  }
+  let envLang: string | undefined
+  try {
+    envLang = (await $.env.get('LANG')) ?? (await $.env.get('LC_ALL'))
+  } catch {
+    // no environment here
+  }
+  return langOf(setting, envLang)
+}
+
+/** The language to draw in: the game's setting when pinned, else Claude's. */
+async function langNow($: EngineInterface, state: GameState | null): Promise<Lang> {
+  const pinned = state?.settings.language
+  if (pinned === 'zh' || pinned === 'en') return pinned
+  return read($, lang)
+}
+
 async function load($: EngineInterface): Promise<GameState> {
   const now = await $.clock.now()
   const raw = await storeGet($)
-  const { state, migratedFrom, isReset } = migrate(raw, now)
+  let { state } = migrate(raw, now)
+  const { migratedFrom, isReset } = migrate(raw, now)
+  // A fresh game in English names its first fish in English.
+  if ((raw === undefined || isReset) && (await read($, lang)) === 'en') {
+    state = { ...state, fish: state.fish.map(f => ({ ...f, name: SPECIES[f.species].en })) }
+  }
   if (migratedFrom === 2) await storeSet($, BACKUP_KEY, raw)
   if (migratedFrom !== null || isReset || raw === undefined) await storeSet($, STORE_KEY, state)
   await update($, game, () => state)
@@ -76,13 +112,14 @@ async function commit($: EngineInterface, change: (state: GameState, now: number
   const stored = migrate(await storeGet($), now).state
   const base = stored.revision > mine.revision ? mergeStates(mine, stored) : mine
   const { state, events } = change(base, now)
+  const L = await langNow($, base)
   let next = state
   for (const ev of events) {
-    const text = describe(next, ev)
+    const text = describe(next, ev, L)
     if (text) next = appendLog(next, text, now)
   }
   const refused = events.find(ev => ev.kind === 'refused')
-  await update($, notice, () => (refused && refused.kind === 'refused' ? refusalText(refused.reason) : null))
+  await update($, notice, () => (refused && refused.kind === 'refused' ? refusalText(refused.reason, L) : null))
   if (next !== base) await storeSet($, STORE_KEY, next)
   await update($, game, () => next)
   return events
@@ -107,6 +144,7 @@ function rewardFor(tool: string, command: string | undefined, isError: boolean):
 
 type Draw = {
   el: ReturnType<EngineInterface['ui']['resolve']>
+  lang: Lang
   surface: string
   columns: number
   /** Rows the site allows (the band's maxRows); 0 when unknown. */
@@ -190,7 +228,7 @@ function textTank($: EngineInterface, d: Draw, selected: string | null): RenderE
   let used = 0
   return (
     <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1} width={cols + 4}>
-      {lines.length === 0 ? <Text dimColor>（空魚缸）</Text> : lines}
+      {lines.length === 0 ? <Text dimColor>{tr(d.lang, 'emptyTank')}</Text> : lines}
       <Box flexDirection="row">
         {list.length === 0 && <Text dimColor>{' '}</Text>}
         {list.map(p => {
@@ -269,7 +307,7 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
   }
   return (
     <Box flexDirection="column" width="100%">
-      {Svg({ source, alt: `魚缸：${s.fish.map(f => f.name).join('、')}`, width: widthPx, height: heightPx })}
+      {Svg({ source, alt: tr(d.lang, 'tankAlt') + s.fish.map(f => f.name).join(d.lang === 'zh' ? '、' : ', '), width: widthPx, height: heightPx })}
       {taps}
       {piles(s, W).map(p => (
         <Box key={`pile-${p.fishId}`} position="absolute" left={Math.min(cols - 5, Math.round((p.x / W) * cols))} bottom={1}>
@@ -290,12 +328,12 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
   return (
     <Box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
       <Text color="yellow">🪙 {fmt(s.coins)}</Text>
-      <Text dimColor={pending === 0}>{pending > 0 ? `缸底有 ${pending} 枚金幣，點它收取` : '魚還在累積能量'}</Text>
-      <Text dimColor>點空水處撒飼料（🍤 {s.food}）</Text>
+      <Text dimColor={pending === 0}>{pending > 0 ? tr(d.lang, 'coinsOnFloor', { n: pending }) : tr(d.lang, 'accumulating')}</Text>
+      <Text dimColor>{tr(d.lang, 'tapToFeed', { n: s.food })}</Text>
       {note && <Text color="yellow">{note}</Text>}
-      {hungry > 0 && <Text color="yellow">❗ {hungry} 條魚餓了</Text>}
-      {hungry > 0 && <Button key="band-feed" plain onPress={() => void commit($, (st, now) => feed(st, null, now))}>🍤 餵全部</Button>}
-      <Button key="band-open" plain onPress={() => void $.ui.open({ id: PANE, title: 'Token Tank', focus: true })}>🐠 面板</Button>
+      {hungry > 0 && <Text color="yellow">{tr(d.lang, 'hungryCount', { n: hungry })}</Text>}
+      {hungry > 0 && <Button key="band-feed" plain onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>}
+      <Button key="band-open" plain onPress={() => void $.ui.open({ id: PANE, title: 'Token Tank', focus: true })}>{tr(d.lang, 'panel')}</Button>
       {last && <Text dimColor wrap="truncate-end">{last.text}</Text>}
 
     </Box>
@@ -314,16 +352,16 @@ function paneHeader($: EngineInterface, d: Draw, current: View): RenderElement {
   return (
     <Box flexDirection="column" gap={0}>
       <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
-        <Text weight="bold" color="claude">🐠 水族箱</Text>
+        <Text weight="bold" color="claude">{tr(d.lang, 'title')}</Text>
         <Text dimColor>Lv.{tankLevel(s)}</Text>
         <Text color="yellow">🪙 {fmt(s.coins)}</Text>
         <Text dimColor>🍤 {s.food}</Text>
         <Text dimColor>🐟 {s.fish.length}/{MAX_FISH}</Text>
       </Box>
       <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {tab('shop', '🛒 商店')}
-        {tab('fish', '🐟 魚')}
-        {tab('settings', '⚙ 設定')}
+        {tab('shop', tr(d.lang, 'tabShop'))}
+        {tab('fish', tr(d.lang, 'tabFish'))}
+        {tab('settings', tr(d.lang, 'tabSettings'))}
       </Box>
     </Box>
   )
@@ -334,7 +372,7 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
   const s = d.state
   const Svg = (d.el as { Svg?: (p: Record<string, unknown>) => RenderElement }).Svg
   const showArt = d.surface !== 'terminal' && Svg && d.columns >= 36
-  const tabs: [ShopTab, string][] = [['fish', '魚種'], ['decor', '裝飾'], ['food', '飼料']]
+  const tabs: [ShopTab, string][] = [['fish', tr(d.lang, 'shopFish')], ['decor', tr(d.lang, 'shopDecor')], ['food', tr(d.lang, 'shopFood')]]
   let body: RenderElement
   if (tab === 'fish') {
     body = (
@@ -343,13 +381,13 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
           const sp = SPECIES[species]
           return (
             <Box key={`shop-${species}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-              {!isUnlocked ? <Text dimColor weight="bold">？</Text> : showArt && Svg ? Svg({ source: fishPortraitSvg(species, 28), alt: sp.zh, width: 28, height: 21 }) : <Text>🐟</Text>}
-              <Text dimColor={!isUnlocked}>{isUnlocked ? sp.zh : '？？？'}</Text>
+              {!isUnlocked ? <Text dimColor weight="bold">?</Text> : showArt && Svg ? Svg({ source: fishPortraitSvg(species, 28), alt: speciesName(sp, d.lang), width: 28, height: 21 }) : <Text>🐟</Text>}
+              <Text dimColor={!isUnlocked}>{isUnlocked ? speciesName(sp, d.lang) : tr(d.lang, 'mystery')}</Text>
               <Text color="yellow">🪙 {sp.price}</Text>
               {isUnlocked ? (
-                <Button key={`buy-${species}`} variant={canAfford ? 'primary' : 'secondary'} dimColor={!canAfford} onPress={() => void commit($, (st, now) => buyFish(st, species, now, `${now}`))}>購買</Button>
+                <Button key={`buy-${species}`} variant={canAfford ? 'primary' : 'secondary'} dimColor={!canAfford} onPress={() => void commit($, (st, now) => buyFish(st, species, now, `${now}`, d.lang === 'en' ? sp.en : undefined))}>{tr(d.lang, 'buy')}</Button>
               ) : (
-                <Text dimColor>🔒 養到 {sp.unlockAt} 條</Text>
+                <Text dimColor>{tr(d.lang, 'lockedAt', { n: sp.unlockAt })}</Text>
               )}
             </Box>
           )
@@ -362,25 +400,25 @@ function shopView($: EngineInterface, d: Draw, tab: ShopTab): RenderElement {
       <Box flexDirection="column" gap={0}>
         {kinds.map(kind => (
           <Box key={`shop-${kind}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-            {showArt && Svg ? Svg({ source: decorPortraitSvg(kind, 28), alt: DECOR[kind].zh, width: 28, height: 28 }) : <Text>🪸</Text>}
-            <Text>{DECOR[kind].zh}</Text>
+            {showArt && Svg ? Svg({ source: decorPortraitSvg(kind, 28), alt: decorName(kind, d.lang), width: 28, height: 28 }) : <Text>🪸</Text>}
+            <Text>{decorName(kind, d.lang)}</Text>
             <Text color="yellow">🪙 {DECOR[kind].price}</Text>
-            <Text dimColor>已放 {s.decorations.filter(x => x.kind === kind).length}</Text>
-            <Button key={`buy-${kind}`} variant={s.coins >= DECOR[kind].price ? 'primary' : 'secondary'} dimColor={s.coins < DECOR[kind].price} onPress={() => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`))}>放入</Button>
+            <Text dimColor>{tr(d.lang, 'placed', { n: s.decorations.filter(x => x.kind === kind).length })}</Text>
+            <Button key={`buy-${kind}`} variant={s.coins >= DECOR[kind].price ? 'primary' : 'secondary'} dimColor={s.coins < DECOR[kind].price} onPress={() => void commit($, (st, now) => buyDecoration(st, kind, now, `${now}`))}>{tr(d.lang, 'place')}</Button>
           </Box>
         ))}
-        <Text dimColor>裝飾 {s.decorations.length}/{MAX_DECOR}</Text>
+        <Text dimColor>{tr(d.lang, 'decorCount', { n: s.decorations.length, max: MAX_DECOR })}</Text>
       </Box>
     )
   } else {
     body = (
       <Box flexDirection="column" gap={0}>
         <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-          <Text>飼料 <Text color="yellow">🪙 {FOOD_PRICE}</Text><Text dimColor> / 份 · 庫存 {s.food}</Text></Text>
-          <Button key="buy-food-1" onPress={() => void commit($, st => buyFood(st, 1))}>買 1 份</Button>
-          <Button key="buy-food-10" variant="primary" onPress={() => void commit($, st => buyFood(st, 10))}>買 10 份</Button>
+          <Text>{tr(d.lang, 'foodWord')} <Text color="yellow">🪙 {FOOD_PRICE}</Text><Text dimColor>{tr(d.lang, 'foodLine', { n: s.food })}</Text></Text>
+          <Button key="buy-food-1" onPress={() => void commit($, st => buyFood(st, 1))}>{tr(d.lang, 'buyFood1')}</Button>
+          <Button key="buy-food-10" variant="primary" onPress={() => void commit($, st => buyFood(st, 10))}>{tr(d.lang, 'buyFood10')}</Button>
         </Box>
-        <Text dimColor wrap="wrap">餵食：飽食度 +30、心情 +5。飽食度越高，吐的金幣越多。</Text>
+        <Text dimColor wrap="wrap">{tr(d.lang, 'foodHelp')}</Text>
       </Box>
     )
   }
@@ -401,7 +439,7 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
   const Input = (d.el as { Input?: (p: Record<string, unknown>) => RenderElement }).Input
   const s = d.state
   const barW = Math.max(40, Math.min(120, (d.columns - 24) * 6))
-  if (s.fish.length === 0) return <Text dimColor>魚缸是空的，到商店買一條魚吧。</Text>
+  if (s.fish.length === 0) return <Text dimColor>{tr(d.lang, 'noFishYet')}</Text>
   return (
     <Box flexDirection="column" gap={0}>
       {s.fish.map(f => {
@@ -413,7 +451,7 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
           <Box key={`fish-${f.id}`} flexDirection="column" gap={0}>
             <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
               <Button key={`pick-${f.id}`} plain onPress={() => void update($, selectedId, cur => (cur === f.id ? null : f.id))}>{isOpen ? '▾' : '▸'} {f.name}</Button>
-              <Text dimColor>{sp.zh} Lv.{f.level}</Text>
+              <Text dimColor>{speciesName(sp, d.lang)} Lv.{f.level}</Text>
               <Text color={f.hunger < 25 ? 'yellow' : undefined}>🍽 {Math.round(f.hunger)}%</Text>
               <Text>🙂 {Math.round(f.mood)}%</Text>
               {f.pending > 0 && <Text color="yellow">🪙 {f.pending}</Text>}
@@ -425,18 +463,18 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
                   {bar(d, nextXp === null ? 1 : (f.xp - (XP_THRESHOLDS[f.level - 1] ?? 0)) / Math.max(1, nextXp - (XP_THRESHOLDS[f.level - 1] ?? 0)), '#4cc9f0', barW)}
                   <Text dimColor>{nextXp === null ? 'MAX' : `${fmt(f.xp)}/${fmt(nextXp)}`}</Text>
                 </Box>
-                <Text dimColor wrap="wrap">產幣 ×{(sp.rate * (1 + 0.15 * (f.level - 1))).toFixed(2)} · 缸底 {f.pending}/{PENDING_CAP}</Text>
-                <Text color="pink" wrap="wrap">❤ {moodLine(s, f.id)}</Text>
+                <Text dimColor wrap="wrap">{tr(d.lang, 'rateLine', { rate: (sp.rate * (1 + 0.15 * (f.level - 1))).toFixed(2), pending: f.pending, cap: PENDING_CAP })}</Text>
+                <Text color="pink" wrap="wrap">❤ {moodLine(s, f.id, d.lang)}</Text>
                 <Box flexDirection="row" gap={1} flexWrap="wrap">
-                  <Button key={`feed-${f.id}`} onPress={() => void commit($, (st, now) => feed(st, f.id, now))}>🍤 餵食</Button>
-                  <Button key={`level-${f.id}`} variant={canLevel ? 'primary' : 'secondary'} dimColor={!canLevel} onPress={() => void commit($, (st, now) => levelUp(st, f.id, now))}>⬆ 升級{nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`}</Button>
-                  <Button key={`rename-${f.id}`} onPress={() => void update($, isRenaming, v => !v)}>✏️ 改名</Button>
+                  <Button key={`feed-${f.id}`} onPress={() => void commit($, (st, now) => feed(st, f.id, now))}>{tr(d.lang, 'feed')}</Button>
+                  <Button key={`level-${f.id}`} variant={canLevel ? 'primary' : 'secondary'} dimColor={!canLevel} onPress={() => void commit($, (st, now) => levelUp(st, f.id, now))}>{tr(d.lang, 'levelUp')}{nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`}</Button>
+                  <Button key={`rename-${f.id}`} onPress={() => void update($, isRenaming, v => !v)}>{tr(d.lang, 'rename')}</Button>
                 </Box>
                 {renaming && Input && (
                   <Box flexDirection="column">
                     {Input({
                       key: `name-${f.id}`,
-                      placeholder: '新名字，Enter 確定（最多 12 字）',
+                      placeholder: tr(d.lang, 'renamePlaceholder'),
                       onSubmit: (value: string) => {
                         void commit($, st => rename(st, f.id, value)).then(() => update($, isRenaming, () => false))
                       },
@@ -449,7 +487,7 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
         )
       })}
       <Box flexDirection="row" gap={1} flexWrap="wrap">
-        <Button key="feed-all" onPress={() => void commit($, (st, now) => feed(st, null, now))}>🍤 餵全部</Button>
+        <Button key="feed-all" onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>
       </Box>
     </Box>
   )
@@ -463,35 +501,41 @@ function settingsView($: EngineInterface, d: Draw): RenderElement {
     void commit($, (state, now) => ({ state: { ...state, settings: { ...state.settings, ...patch }, revision: state.revision + 1, updatedAt: now }, events: [] }))
   const toggle = (key: 'showCoins' | 'showBubbles' | 'reduceMotion' | 'showBand', label: string) => (
     <Box key={`set-${key}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
-      <Button key={`toggle-${key}`} variant={s.settings[key] ? 'primary' : 'secondary'} onPress={() => set({ [key]: !s.settings[key] })}>{s.settings[key] ? '開' : '關'}</Button>
+      <Button key={`toggle-${key}`} variant={s.settings[key] ? 'primary' : 'secondary'} onPress={() => set({ [key]: !s.settings[key] })}>{s.settings[key] ? tr(d.lang, 'on') : tr(d.lang, 'off')}</Button>
       <Text>{label}</Text>
     </Box>
   )
-  const themes: [GameState['settings']['theme'], string][] = [['ocean', '經典海洋'], ['wreck', '沉船遺跡'], ['reef', '珊瑚花園'], ['abyss', '夜光深海']]
+  const themes: [GameState['settings']['theme'], string][] = [['ocean', tr(d.lang, 'themeOcean')], ['wreck', tr(d.lang, 'themeWreck')], ['reef', tr(d.lang, 'themeReef')], ['abyss', tr(d.lang, 'themeAbyss')]]
   return (
     <Box flexDirection="column" gap={0}>
-      <Text dimColor>主題</Text>
+      <Text dimColor>{tr(d.lang, 'theme')}</Text>
       <Box flexDirection="row" gap={1} flexWrap="wrap">
         {themes.map(([id, label]) => (
           <Button key={`theme-${id}`} variant={s.settings.theme === id ? 'primary' : 'secondary'} onPress={() => set({ theme: id })}>{label}</Button>
         ))}
       </Box>
-      <Text dimColor>魚缸高度</Text>
+      <Text dimColor>{tr(d.lang, 'tankHeight')}</Text>
       <Box flexDirection="row" gap={1} flexWrap="wrap">
         {(['s', 'm', 'l'] as const).map(size => (
-          <Button key={`size-${size}`} variant={s.settings.tankSize === size ? 'primary' : 'secondary'} onPress={() => set({ tankSize: size })}>{size === 's' ? '矮' : size === 'm' ? '中' : '高'}</Button>
+          <Button key={`size-${size}`} variant={s.settings.tankSize === size ? 'primary' : 'secondary'} onPress={() => set({ tankSize: size })}>{tr(d.lang, size === 's' ? 'sizeS' : size === 'm' ? 'sizeM' : 'sizeL')}</Button>
         ))}
       </Box>
-      {toggle('showBand', '長任務時在輸入框上方出現魚缸')}
-      {toggle('showCoins', '顯示缸底金幣')}
-      {toggle('showBubbles', '泡泡效果')}
-      {toggle('reduceMotion', '簡化動畫（低效能模式）')}
-      <Text dimColor wrap="wrap">點魚缸的空水處撒飼料，餓的魚會衝過去吃；點魚牠會逃開。/fish 顯示或收起魚缸；/fish collect 收全部金幣；/fish feed 餵全部。</Text>
-      <Text weight="bold">📊 統計</Text>
-      <Text wrap="wrap">今日 Token {fmt(st.todayEffectiveTokens)} · 產幣 {fmt(st.todayCoinsMinted)} · 收集 {fmt(st.todayCoinsCollected)} · 回合 {fmt(st.todayTurns)}</Text>
-      <Text dimColor wrap="wrap">累計 Token {fmt(st.totalEffectiveTokens)} · 產幣 {fmt(st.totalCoinsMinted)} · 收集 {fmt(st.totalCoinsCollected)}</Text>
-      <Text dimColor wrap="wrap">測試通過 {fmt(st.testsPassed)} · Commit {fmt(st.commits)} · 修改 {fmt(st.edits)} · 餵食 {fmt(st.feeds)} · 魚冊 {s.dex.length}/{SPECIES_LIST.length}</Text>
-      {s.log.length > 0 && <Text weight="bold">📜 紀錄</Text>}
+      <Text dimColor>{tr(d.lang, 'language')}</Text>
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {(['auto', 'zh', 'en'] as const).map(l => (
+          <Button key={`lang-${l}`} variant={s.settings.language === l ? 'primary' : 'secondary'} onPress={() => set({ language: l })}>{tr(d.lang, l === 'auto' ? 'langAuto' : l === 'zh' ? 'langZh' : 'langEn')}</Button>
+        ))}
+      </Box>
+      {toggle('showBand', tr(d.lang, 'setBand'))}
+      {toggle('showCoins', tr(d.lang, 'setCoins'))}
+      {toggle('showBubbles', tr(d.lang, 'setBubbles'))}
+      {toggle('reduceMotion', tr(d.lang, 'setMotion'))}
+      <Text dimColor wrap="wrap">{tr(d.lang, 'help')}</Text>
+      <Text weight="bold">{tr(d.lang, 'stats')}</Text>
+      <Text wrap="wrap">{tr(d.lang, 'statsToday', { t: fmt(st.todayEffectiveTokens), m: fmt(st.todayCoinsMinted), c: fmt(st.todayCoinsCollected), r: fmt(st.todayTurns) })}</Text>
+      <Text dimColor wrap="wrap">{tr(d.lang, 'statsTotal', { t: fmt(st.totalEffectiveTokens), m: fmt(st.totalCoinsMinted), c: fmt(st.totalCoinsCollected) })}</Text>
+      <Text dimColor wrap="wrap">{tr(d.lang, 'statsMore', { tests: fmt(st.testsPassed), commits: fmt(st.commits), edits: fmt(st.edits), feeds: fmt(st.feeds), dex: s.dex.length, all: SPECIES_LIST.length })}</Text>
+      {s.log.length > 0 && <Text weight="bold">{tr(d.lang, 'log')}</Text>}
       {s.log.slice(-5).reverse().map((e, i) => (
         <Box key={`log-${i}`} flexDirection="row" gap={1}>
           <Text dimColor>{clock(e.at)}</Text>
@@ -506,29 +550,32 @@ function settingsView($: EngineInterface, d: Draw): RenderElement {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'fish', description: '顯示或收起代幣魚缸；/fish panel 開面板、/fish collect 收金幣、/fish feed 餵魚' })
+    const L = await detectLang($)
+    await update($, lang, () => L)
+    await $.command.register({ name: 'fish', description: tr(L, 'cmdDescription') })
     await load($)
     return next(e)
   })
 
   on('command.run', { command: 'fish' }, async ($, e) => {
     const arg = (e.args ?? '').trim()
+    const L = await langNow($, await read($, game))
     if (arg === 'collect') {
       const events = await commit($, (st, now) => collect(st, null, now))
       const got = events.find(ev => ev.kind === 'collected')
-      return { text: got && got.kind === 'collected' ? `收了 ${got.coins} 枚金幣。` : '沒有金幣可以收。' }
+      return { text: got && got.kind === 'collected' ? tr(L, 'cmdCollected', { n: got.coins }) : tr(L, 'cmdNothing') }
     }
     if (arg === 'feed') {
       await commit($, (st, now) => feed(st, null, now))
-      return { text: '餵過了。' }
+      return { text: tr(L, 'cmdFed') }
     }
     if (arg === 'panel' || arg === 'shop') {
       await $.ui.open({ id: PANE, title: 'Token Tank', focus: true })
-      return { text: '面板打開了。' }
+      return { text: tr(L, 'cmdPanel') }
     }
     const shown = await update($, isPinned, was => !was)
     await $.ui.invalidate('ui.render')
-    return { text: shown ? '魚缸顯示在輸入框上方。再打一次 /fish 收起。' : '魚缸收起了（長任務時會自己出現）。' }
+    return { text: shown ? tr(L, 'cmdShown') : tr(L, 'cmdHidden') }
   })
 
   on('turn.start', async ($, e, next) => {
@@ -551,10 +598,11 @@ export const register: Register = on => {
     const events = await commit($, (st, now) => applyTurn(st, { turnId: e.turnId, usage, now }))
     const minted = events.filter(ev => ev.kind === 'minted').reduce((n, ev) => n + (ev.kind === 'minted' ? ev.coins : 0), 0)
     const now = await $.clock.now()
+    const L = await langNow($, await read($, game))
     if (effective > 0 && minted === 0 && !events.some(ev => ev.kind === 'refused')) {
-      await update($, game, st => (st ? appendLog(st, `Claude 用了 ${fmt(effective)} 有效 Token，魚還在累積能量。`, now) : st))
+      await update($, game, st => (st ? appendLog(st, tr(L, 'turnNoCoins', { t: fmt(effective) }), now) : st))
     } else if (minted > 0) {
-      await update($, game, st => (st ? appendLog(st, `Claude 用了 ${fmt(effective)} 有效 Token，魚吐出了 ${minted} 枚金幣！`, now) : st))
+      await update($, game, st => (st ? appendLog(st, tr(L, 'turnCoins', { t: fmt(effective), n: minted }), now) : st))
     }
     return done
   })
@@ -580,7 +628,7 @@ export const register: Register = on => {
     const { Box } = el
     const now = await $.clock.now()
     const columns = e.props.bodyColumns || e.viewport?.columns || 80
-    const d: Draw = { el, surface: e.surface, columns, maxRows: e.props.maxRows ?? 0, state, now }
+    const d: Draw = { el, lang: await langNow($, state), surface: e.surface, columns, maxRows: e.props.maxRows ?? 0, state, now }
     // The tank sits above whatever the plugins beneath draw (pillbar hugs the prompt).
     const below = await next(e)
     return (
@@ -601,12 +649,12 @@ export const register: Register = on => {
     if (!state) {
       return (
         <Box padding={1}>
-          <Text dimColor>水族箱載入中……</Text>
+          <Text dimColor>{tr(await read($, lang), 'loading')}</Text>
         </Box>
       )
     }
     const columns = e.props.bodyColumns || e.viewport?.columns || 60
-    const d: Draw = { el, surface: e.surface, columns, maxRows: 0, state, now }
+    const d: Draw = { el, lang: await langNow($, state), surface: e.surface, columns, maxRows: 0, state, now }
     return (
       <Box flexDirection="column" gap={0} paddingX={1}>
         {paneHeader($, d, current)}

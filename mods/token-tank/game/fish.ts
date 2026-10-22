@@ -9,11 +9,11 @@ export const NAME_MAX = 12
 const FEED_HUNGER = 30
 const FEED_MOOD = 5
 
-export function newFish(species: SpeciesId, now: number, idSeed: string): Fish {
+export function newFish(species: SpeciesId, now: number, idSeed: string, name?: string): Fish {
   return {
     id: `${species}-${idSeed}`,
     species,
-    name: SPECIES[species].zh,
+    name: name ?? SPECIES[species].zh,
     level: 1,
     xp: 0,
     hunger: 80,

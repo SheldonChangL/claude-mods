@@ -6,6 +6,18 @@ and successful edits, passing tests and git commits pay a little extra. You
 collect the coins, feed the fish, buy new species and decorations, and level
 the fish up. Nothing dies while you are away; the tank simply waits.
 
+## Install
+
+From a terminal session of Claude Code (`y` to add the marketplace, then pick a scope):
+
+```
+/plugin install token-tank --marketplace SheldonChangL/claude-mods
+```
+
+From a shell: `claude plugin install token-tank --marketplace SheldonChangL/claude-mods`. In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `SheldonChangL/claude-mods`, then **Add plugin**.
+
+The words follow Claude's language: Chinese when Claude Code's `language` setting (or the shell's `LANG`) is Chinese, English otherwise; the settings tab can pin either.
+
 ## Use
 
 - `/fish` opens the pane. `/fish collect` collects every pending coin and

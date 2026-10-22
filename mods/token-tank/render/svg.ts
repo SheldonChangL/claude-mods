@@ -197,6 +197,12 @@ function fishMarkup(fish: Fish, index: number, count: number, o: TankOptions, st
   )
 }
 
+/** The animation a decoration plays: its sway where it has one, else its idle or closed frame. */
+function decorAnim(kind: string): string {
+  const frames = SPRITES[kind]?.frames ?? {}
+  return ['sway', 'idle', 'closed'].find(a => a in frames) ?? Object.keys(frames)[0] ?? 'idle'
+}
+
 /** Food falling from where the person clicked, then sinking to the sand. */
 function pelletMarkup(state: GameState, o: TankOptions): string {
   let out = ''
@@ -263,7 +269,7 @@ function floorCoins(state: GameState, o: TankOptions): string {
 function decorMarkup(d: Decoration, o: TankOptions): string {
   const sprite = SPRITES[d.kind]
   if (!sprite) return ''
-  const anim = d.kind === 'seaweed' ? 'sway' : d.kind === 'chest' ? 'closed' : 'idle'
+  const anim = decorAnim(d.kind)
   // Decorations are placed on the base width; they spread over a wider tank.
   const x = Math.max(0, Math.min(W - sprite.w, (d.x * W) / BASE_W - sprite.w / 2))
   const y = d.y - sprite.h + 4
@@ -322,7 +328,7 @@ export function tankSvg(state: GameState, o: TankOptions): string {
   const decorShown = [...new Set(state.decorations.map(d => d.kind))]
   const defs =
     speciesShown.map(s => symbols(s, 'swim') + (state.fish.some(f => f.species === s && f.state === 'spitCoin') ? symbols(s, 'spit') : '')).join('') +
-    decorShown.map(k => symbols(k, k === 'seaweed' ? 'sway' : k === 'chest' ? 'closed' : 'idle')).join('') +
+    decorShown.map(k => symbols(k, decorAnim(k))).join('') +
     (o.showCoins && state.fish.some(f => f.pending > 0) ? symbols('coin', 'spin') : '') +
     (state.pellets.some(p => o.now - p.at < PELLET_SHOW_MS) ? symbols('pellet', 'idle') : '')
   const fish = state.fish.map((f, i) => fishMarkup(f, i, state.fish.length, o, state)).join('')

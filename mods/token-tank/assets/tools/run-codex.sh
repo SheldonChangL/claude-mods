@@ -5,7 +5,7 @@
 set -u
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$DIR/tools/codex.log"
-NAMES=(guppy clownfish angelfish koi puffer tang goldfish seahorse neon betta butterflyfish lionfish arowana coin pellet seaweed coral rock chest ruin anchor shell starfish)
+NAMES=(guppy clownfish angelfish koi puffer tang goldfish seahorse neon betta butterflyfish lionfish arowana discus oscar danio moorishidol parrotfish mandarin swordtail mola coin pellet seaweed coral rock chest ruin anchor shell starfish shipwreck anemone clam statue wheel)
 LIMIT=1200
 for round in 1 2 3 4 5 6; do
   for name in $NAMES; do
@@ -26,6 +26,6 @@ for round in 1 2 3 4 5 6; do
     wait $pid 2>/dev/null
     echo "=== $name exit $? $(date)" >> "$LOG"
   done
-  if [ $(ls "$DIR/sprites"/*.json 2>/dev/null | wc -l) -ge 23 ]; then break; fi
+  if [ $(ls "$DIR/sprites"/*.json 2>/dev/null | wc -l) -ge 36 ]; then break; fi
 done
 echo "=== all rounds done $(date)" >> "$LOG"
