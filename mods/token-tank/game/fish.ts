@@ -36,7 +36,7 @@ export const PELLETS_KEEP = 6
 /**
  * A click on open water: one portion of food drops there and the hungry fish
  * (under FULL_ENOUGH, hungriest first, at most EATERS_PER_PELLET) rush to it
- * and eat. With nobody hungry the food still drops and is wasted.
+ * and eat. With nobody hungry nothing drops and the food is kept.
  */
 export function dropFood(state: GameState, x: number, y: number, now: number): Outcome {
   if (state.fish.length === 0) return refuse(state, 'no-fish')
@@ -46,6 +46,8 @@ export function dropFood(state: GameState, x: number, y: number, now: number): O
     .sort((a, b) => a.hunger - b.hunger)
     .slice(0, EATERS_PER_PELLET)
     .map((f) => f.id)
+  // Nobody hungry: the food stays in the pantry.
+  if (eaters.length === 0) return refuse(state, 'all-full')
   const fish = state.fish.map((f): Fish =>
     eaters.includes(f.id)
       ? { ...f, hunger: Math.min(100, f.hunger + FEED_HUNGER), mood: Math.min(100, f.mood + FEED_MOOD), state: 'feeding', since: now, lastFedAt: now }

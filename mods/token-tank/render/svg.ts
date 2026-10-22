@@ -12,7 +12,9 @@ import type { Sprite, SpriteFrame } from './sprites'
 export const BASE_W = 320
 export const TANK_H = 180
 const FLOOR_Y = 150
-export const FISH_SCALE = 1.3
+/** How much larger than their pixels the fish are drawn, per tank height. */
+export const FISH_SCALES = { s: 1.3, m: 1.6, l: 1.9 } as const
+let FISH_SCALE = 1.6
 /** The width of the tank being drawn, in design pixels: set by `tankSvg` from the room it has. */
 let W = BASE_W
 
@@ -71,6 +73,8 @@ export type TankOptions = {
   now: number
   /** The tank's width in design pixels (height is always TANK_H); the element fills its slot. */
   width?: number
+  /** The fish's size over their pixels (FISH_SCALES); the hit test must use the same. */
+  fishScale?: number
 }
 
 /** Where a fish swims: its lane and the span it patrols, in design pixels. */
@@ -91,11 +95,11 @@ export type FishLayout = {
   isHungry: boolean
 }
 
-export function fishLayout(fish: Fish, index: number, count: number, width = W, now = 0): FishLayout {
+export function fishLayout(fish: Fish, index: number, count: number, width = W, now = 0, scale = FISH_SCALE): FishLayout {
   const sp = SPECIES[fish.species]
   const sprite = SPRITES[fish.species]
-  const w = (sprite?.w ?? 32) * FISH_SCALE
-  const h = (sprite?.h ?? 24) * FISH_SCALE
+  const w = (sprite?.w ?? 32) * scale
+  const h = (sprite?.h ?? 24) * scale
   const laneTop = 18
   const laneBottom = FLOOR_Y - h - 6
   const y = laneTop + ((index + 0.5) / Math.max(count, 1)) * (laneBottom - laneTop) + (hash01(fish.id, 1) - 0.5) * 10
@@ -121,6 +125,12 @@ export function fishCentreAt(l: FishLayout, nowMs: number): { x: number; y: numb
   return { x: x + l.w / 2, y: l.y }
 }
 
+/** The fish in lane order, small species on top and large ones near the sand. */
+export function laneOrder(fish: readonly Fish[]): Fish[] {
+  const rank = { s: 0, m: 1, l: 2 } as const
+  return [...fish].sort((a, b) => rank[SPECIES[a.species].size] - rank[SPECIES[b.species].size] || a.id.localeCompare(b.id))
+}
+
 /** The pellets still worth drawing: dropped in the last six seconds. */
 export const PELLET_SHOW_MS = 4500
 
@@ -141,9 +151,11 @@ function fishMarkup(fish: Fish, index: number, count: number, o: TankOptions, st
   const body = `<g transform="scale(${FISH_SCALE})">${animatedUse(fish.species, anim, frameDur, -sprite.w / 2, -sprite.h / 2, o.isMotion)}</g>`
   const ring = isSelected ? `<rect x="${-w / 2 - 2}" y="${-h / 2 - 2}" width="${w + 4}" height="${h + 4}" fill="none" stroke="#ffe066" stroke-width="1" stroke-dasharray="2 2" rx="2"/>` : ''
   const hungryMark = isHungry ? `<text x="${w / 2 - 2}" y="${-h / 2 - 2}" font-family="monospace" font-size="9" fill="#ffd166" font-weight="bold">!</text>` : ''
+  // A fish with coins waiting glows softly gold.
+  const glow = fish.pending > 0 ? `<ellipse cx="0" cy="0" rx="${(w * 0.7).toFixed(0)}" ry="${(h * 0.75).toFixed(0)}" fill="url(#glow)">${o.isMotion ? '<animate attributeName="opacity" values="0.5;1;0.5" dur="2.4s" repeatCount="indefinite"/>' : ''}</ellipse>` : ''
   if (!o.isMotion) {
     const xm = (x1 + x2) / 2 + w / 2
-    return `<g transform="translate(${xm.toFixed(1)} ${y.toFixed(1)})">${body}${ring}${hungryMark}</g>`
+    return `<g transform="translate(${xm.toFixed(1)} ${y.toFixed(1)})">${glow}${body}${ring}${hungryMark}</g>`
   }
   const gid = `fish-${fish.id.replace(/[^a-zA-Z0-9_-]/g, '')}`
   const dashX = (hash01(fish.id, 17) < 0.5 ? -1 : 1) * (40 + hash01(fish.id, 18) * 30)
@@ -182,7 +194,7 @@ function fishMarkup(fish: Fish, index: number, count: number, o: TankOptions, st
       `<g transform="translate(0 ${y.toFixed(1)})">` +
       lane +
       rush +
-      `<g id="${gid}" style="cursor:pointer">${dash}<g transform="scale(${faces})">${body}</g></g>` +
+      `${glow}<g id="${gid}" style="cursor:pointer">${dash}<g transform="scale(${faces})">${body}</g></g>` +
       `${ring}${hungryMark}</g></g>`
     )
   }
@@ -191,7 +203,7 @@ function fishMarkup(fish: Fish, index: number, count: number, o: TankOptions, st
     `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${bob};0 0" dur="${bobDur.toFixed(2)}s" begin="${bobBegin}s" repeatCount="indefinite"/>` +
     `<g transform="translate(${x1.toFixed(1)} 0)">` +
     `<animateTransform attributeName="transform" type="translate" values="${x1.toFixed(1)} 0;${x2.toFixed(1)} 0;${x1.toFixed(1)} 0" keyTimes="0;0.5;1" dur="${dur.toFixed(2)}s" begin="${begin}s" repeatCount="indefinite" calcMode="linear"/>` +
-    `<g id="${gid}" style="cursor:pointer">${dash}<g><animateTransform attributeName="transform" type="scale" values="1 1;-1 1;1 1" keyTimes="0;0.5;1" dur="${dur.toFixed(2)}s" begin="${begin}s" repeatCount="indefinite" calcMode="discrete"/>${body}</g></g>` +
+    `${glow}<g id="${gid}" style="cursor:pointer">${dash}<g><animateTransform attributeName="transform" type="scale" values="1 1;-1 1;1 1" keyTimes="0;0.5;1" dur="${dur.toFixed(2)}s" begin="${begin}s" repeatCount="indefinite" calcMode="discrete"/>${body}</g></g>` +
     // the ring and the mark ride along inside the moving group, unflipped
     `${ring}${hungryMark}</g></g>`
   )
@@ -322,6 +334,7 @@ function sand(theme: Theme): string {
 /** The whole tank. `widthPx` sizes the element; the drawing scales with it. */
 export function tankSvg(state: GameState, o: TankOptions): string {
   W = Math.max(200, Math.round(o.width ?? BASE_W))
+  FISH_SCALE = o.fishScale ?? FISH_SCALES.m
   const theme = state.settings.theme
   const t = THEMES[theme]
   const speciesShown = [...new Set(state.fish.map(f => f.species))]
@@ -331,11 +344,11 @@ export function tankSvg(state: GameState, o: TankOptions): string {
     decorShown.map(k => symbols(k, decorAnim(k))).join('') +
     (o.showCoins && state.fish.some(f => f.pending > 0) ? symbols('coin', 'spin') : '') +
     (state.pellets.some(p => o.now - p.at < PELLET_SHOW_MS) ? symbols('pellet', 'idle') : '')
-  const fish = state.fish.map((f, i) => fishMarkup(f, i, state.fish.length, o, state)).join('')
+  const fish = laneOrder(state.fish).map((f, i) => fishMarkup(f, i, state.fish.length, o, state)).join('')
   const decor = state.decorations.map(d => decorMarkup(d, o)).join('')
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${TANK_H}" width="${W * 4}" height="${TANK_H * 4}" shape-rendering="crispEdges" style="image-rendering:pixelated">` +
-    `<defs><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${t.top}"/><stop offset="1" stop-color="${t.bottom}"/></linearGradient>${defs}</defs>` +
+    `<defs><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${t.top}"/><stop offset="1" stop-color="${t.bottom}"/></linearGradient><radialGradient id="glow"><stop offset="0" stop-color="#ffd166" stop-opacity="0.45"/><stop offset="1" stop-color="#ffd166" stop-opacity="0"/></radialGradient>${defs}</defs>` +
     `<rect width="${W}" height="${TANK_H}" fill="url(#water)"/>` +
     rays(theme, o) +
     sand(theme) +

@@ -1,1 +1,1 @@
-Created and validated `sprites/swordtail.json`.
+Created `sprites/wheel.json`; validation passes.

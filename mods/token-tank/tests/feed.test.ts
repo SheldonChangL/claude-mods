@@ -18,8 +18,8 @@ test('food dropped on open water feeds the hungry fish, hungriest first, and is 
   expect(out.events[0]).toMatchObject({ kind: 'dropped', x: 100, y: 60 })
 
   const full = dropFood({ ...s, fish: s.fish.map(f => ({ ...f, hunger: 95 })) }, 10, 10, T0)
-  expect(full.state.pellets[0]!.eaters).toEqual([])
-  expect(full.state.food).toBe(s.food - 1)
+  expect(full.events[0]).toMatchObject({ kind: 'refused', reason: 'all-full' })
+  expect(full.state.food).toBe(s.food)
 
   const none = dropFood({ ...s, food: 0 }, 10, 10, T0)
   expect(none.events[0]).toMatchObject({ kind: 'refused', reason: 'no-food' })

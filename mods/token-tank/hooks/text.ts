@@ -40,6 +40,8 @@ export const S = {
   noFishYet: { zh: '魚缸是空的，到商店買一條魚吧。', en: 'The tank is empty. Buy a fish in the shop.' },
   rateLine: { zh: '產幣 ×{rate} · 缸底 {pending}/{cap}', en: 'coin rate ×{rate} · on the sand {pending}/{cap}' },
   feed: { zh: '🍤 餵食', en: '🍤 Feed' },
+  nextCoin: { zh: '下一枚 {p}%', en: 'next coin {p}%' },
+  allFull: { zh: '魚都吃飽了（🍤 {n}）', en: 'The fish are all full (🍤 {n})' },
   levelUp: { zh: '⬆ 升級', en: '⬆ Level up' },
   rename: { zh: '✏️ 改名', en: '✏️ Rename' },
   renamePlaceholder: { zh: '新名字，Enter 確定（最多 12 字）', en: 'New name, Enter to confirm (12 characters max)' },
@@ -165,6 +167,7 @@ const REFUSALS: Record<string, Pair> = {
   'unknown-decor': { zh: '沒有這種裝飾。', en: 'No such decoration.' },
   'unknown-reward': { zh: '沒有這種獎勵。', en: 'No such reward.' },
   'bad-count': { zh: '數量不對。', en: 'Bad count.' },
+  'all-full': { zh: '魚都吃飽了，飼料留著。', en: 'The fish are all full; the food is kept.' },
 }
 
 export function refusalText(reason: string, lang: Lang): string {

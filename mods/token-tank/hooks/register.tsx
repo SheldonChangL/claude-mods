@@ -14,11 +14,11 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import type { ShopTab, View } from '../types'
 import type { DecorId, GameEvent, GameState, Outcome, RewardKind } from '../game/types'
 import { applyTurn, effectiveTokens, LEVEL_UP_COST, PENDING_CAP, reward, XP_THRESHOLDS } from '../game/economy'
-import { collect, dropFood, feed, levelUp, pendingTotal, rename, startle } from '../game/fish'
+import { collect, dropFood, feed, FULL_ENOUGH, levelUp, pendingTotal, rename, startle } from '../game/fish'
 import { DECOR, FOOD_PRICE, SPECIES, SPECIES_LIST } from '../game/species'
 import { buyDecoration, buyFish, buyFood, MAX_DECOR, MAX_FISH, shopList } from '../game/shop'
 import { appendLog, mergeStates, migrate } from '../game/state'
-import { decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
+import { decorPortraitSvg, fishCentreAt, fishLayout, fishPortraitSvg, FISH_SCALES, laneOrder, PELLET_SHOW_MS, piles, TANK_H, tankSvg } from '../render/svg'
 import { clock, decorName, describe, fmt, langOf, moodLine, refusalText, speciesName, tr } from './text'
 import type { Lang } from './text'
 
@@ -61,6 +61,14 @@ async function storeSet($: EngineInterface, key: string, value: unknown): Promis
 async function detectLang($: EngineInterface): Promise<Lang> {
   let setting: string | undefined
   try {
+    // The row the /config menu shows as Language.
+    const row = (await $.config.list()).find(r => r.key === 'language')
+    if (row && typeof row.value === 'string' && row.value.trim() !== '') setting = row.value
+  } catch {
+    // no config rows here
+  }
+  try {
+    if (setting !== undefined) throw new Error('known')
     const home = await $.env.get('HOME')
     if (home) {
       const text = await $.fs.read(`${home}/.claude/settings.json`)
@@ -171,8 +179,8 @@ async function tapTank($: EngineInterface, X: number, Y: number, W: number, rend
   if (!state) return
   const now = await $.clock.now()
   const n = state.fish.length
-  const hit = state.fish.find((f, i) => {
-    const l = fishLayout(f, i, n, W, renderedAt)
+  const hit = laneOrder(state.fish).find((f, i) => {
+    const l = fishLayout(f, i, n, W, renderedAt, FISH_SCALES[state.settings.tankSize])
     const c = fishCentreAt(l, now)
     return Math.abs(X - c.x) <= l.w * 0.7 && Math.abs(Y - c.y) <= l.h * 0.8
   })
@@ -282,6 +290,7 @@ function tankBlock($: EngineInterface, d: Draw, aspect: number, selected: string
         selectedId: selected,
         now: d.now,
         width: W,
+        fishScale: FISH_SCALES[s.settings.tankSize],
       }),
     }
     tankCache = drawing
@@ -329,7 +338,7 @@ function bandRow($: EngineInterface, d: Draw, note: string | null): RenderElemen
     <Box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
       <Text color="yellow">🪙 {fmt(s.coins)}</Text>
       <Text dimColor={pending === 0}>{pending > 0 ? tr(d.lang, 'coinsOnFloor', { n: pending }) : tr(d.lang, 'accumulating')}</Text>
-      <Text dimColor>{tr(d.lang, 'tapToFeed', { n: s.food })}</Text>
+      <Text dimColor>{s.fish.some(f => f.hunger < FULL_ENOUGH) ? tr(d.lang, 'tapToFeed', { n: s.food }) : tr(d.lang, 'allFull', { n: s.food })}</Text>
       {note && <Text color="yellow">{note}</Text>}
       {hungry > 0 && <Text color="yellow">{tr(d.lang, 'hungryCount', { n: hungry })}</Text>}
       {hungry > 0 && <Button key="band-feed" plain onPress={() => void commit($, (st, now) => feed(st, null, now))}>{tr(d.lang, 'feedAll')}</Button>}
@@ -518,8 +527,13 @@ function fishView($: EngineInterface, d: Draw, selected: string | null, renaming
                   {bar(d, f.mood / 100, '#4cc9f0', barW)}
                   <Text dimColor>{Math.round(f.mood)}%</Text>
                 </Box>
+                <Box flexDirection="row" gap={1} alignItems="center">
+                  <Text dimColor>🪙</Text>
+                  {bar(d, f.carry, '#e9b949', barW)}
+                  <Text dimColor>{tr(d.lang, 'nextCoin', { p: Math.round(f.carry * 100) })}</Text>
+                </Box>
                 <Text color="pink" wrap="wrap">❤ {moodLine(s, f.id, d.lang)}</Text>
-                <Box flexDirection="row" gap={3} flexWrap="wrap" marginTop={1}>
+                <Box flexDirection="row" columnGap={3} rowGap={0} flexWrap="wrap" marginTop={1}>
                   {link(d, `feed-${f.id}`, `${tr(d.lang, 'feed')} ›`, () => void commit($, (st, now) => feed(st, f.id, now)), s.food <= 0)}
                   {link(d, `level-${f.id}`, `${tr(d.lang, 'levelUp')}${nextXp === null ? '' : ` ${LEVEL_UP_COST(f.level)}🪙`} ›`, () => void commit($, (st, now) => levelUp(st, f.id, now)), !canLevel)}
                   {link(d, `rename-${f.id}`, `${tr(d.lang, 'rename')} ›`, () => void update($, isRenaming, v => !v))}

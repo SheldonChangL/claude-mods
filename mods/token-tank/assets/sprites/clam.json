@@ -1,0 +1,168 @@
+{
+  "name": "clam",
+  "w": 20,
+  "h": 14,
+  "palette": {
+    "A": "#29235f",
+    "B": "#57409b",
+    "C": "#5077c8",
+    "D": "#62d2df",
+    "E": "#a54fd0",
+    "F": "#f4e7ff",
+    "G": "#ffffff"
+  },
+  "frames": {
+    "closed": [
+      [
+        "....................",
+        "......AAAAA.........",
+        "....AABBBBBAA.......",
+        "...ABCCBCBCCBA......",
+        "..ABCCBCBCCCBBA.....",
+        ".ABCCCCCCCCCCBBA....",
+        "ABEEEAEAEAEEEBAA....",
+        ".ABCCCCCCCCCCBBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "....................",
+        "...................."
+      ]
+    ],
+    "open": [
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA........AAA.....",
+        "..AEEEEEEEEEEEA.....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "...................."
+      ],
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA....G...AAA.....",
+        "..AEEEEFFFEEEEA.....",
+        ".ABCCCCFFFCCCCBA....",
+        "..ABCCCCFCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "...................."
+      ]
+    ],
+    "swim": [
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        "AAA.........AAA.....",
+        ".AEEEEEEEEEEEA......",
+        "ABCCCCCCCCCCCBA.....",
+        ".ABCCBCBCCCBBA......",
+        "..ABCCBCBCCBA.......",
+        "...AABBBBBAA........",
+        ".....AAAAA..........",
+        "...................."
+      ],
+      [
+        "....................",
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA........AAA.....",
+        "..AEEEEEEEEEEEA.....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA........."
+      ],
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA.........AAA....",
+        "..AEEEEEEEEEEEAA....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "...................."
+      ],
+      [
+        "....................",
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA........AAA.....",
+        "..AEEEEEEEEEEEA.....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA........."
+      ]
+    ],
+    "spit": [
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA........AAAA....",
+        "..AEEEEEEEEEEA.A....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "...................."
+      ],
+      [
+        ".....AAAAAA.........",
+        "...AABBBBBBAA.......",
+        "..ABCCBCBCCBBA......",
+        ".ABCCCCCCCCCCBA.....",
+        "ABDDDDEDEDDDCBA.....",
+        "AEEEEEEEEEEEEEA.....",
+        ".AAA........AAAA.G..",
+        "..AEEEEEEEEEEA.A....",
+        ".ABCCCCCCCCCCCBA....",
+        "..ABCCBCBCCCBBA.....",
+        "...ABCCBCBCCBA......",
+        "....AABBBBBAA.......",
+        "......AAAAA.........",
+        "...................."
+      ]
+    ]
+  }
+}

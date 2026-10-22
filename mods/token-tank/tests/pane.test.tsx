@@ -139,6 +139,8 @@ test('a passing test command pays a reward once per cooldown', async ($, on) => 
 test('a tap on the band drops food on open water and startles a fish on its lane', async ($, on) => {
   setup(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  // A few turns make the fish hungry enough to want food (a full fish keeps the pantry closed).
+  for (let i = 0; i < 6; i++) await turnDone($, `h${i}`)
   // @ts-ignore
   await $.command.run({ command: 'fish', args: '' } as never)
   const ui = await $.ui.mount({ ...BAND(false), surface: 'desktop' })
