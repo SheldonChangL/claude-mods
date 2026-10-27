@@ -444,30 +444,63 @@ function pushLine(el, push, index) {
  * address draws it as a Link to the browser (never fetched, never shown);
  * the other lines stay plain text, run together as one Text as before.
  */
+/**
+ * What a body line is, for its colour: PTT draws a quote's header
+ * (`※ 引述《someone》之銘言：`) green and the quoted lines (`: …`) cyan, so a
+ * reply's quote never reads as the reply.
+ */
+export function lineKind(line) {
+  const text = String(line ?? '')
+  if (/^※\s*引述/.test(text)) return 'header'
+  if (/^[:：]/.test(text)) return 'quote'
+  return 'plain'
+}
+
+/** Body colours by line kind: theme names only (`success` the green, `suggestion` the nearest to PTT's cyan). */
+export const BODY_STYLE = Object.freeze({
+  plain: Object.freeze({}),
+  header: Object.freeze({ color: 'success' }),
+  quote: Object.freeze({ color: 'suggestion' }),
+})
+
+/**
+ * The article's text. Lines run together as one Text per kind (plain, a
+ * quote's header, quoted lines), each kind in its colour. Where links open,
+ * a line holding an https image address draws it as a Link to the browser
+ * (never fetched, never shown). A body of plain lines alone is one Text.
+ */
 function bodyOf(el, layout, lines) {
   const box = (...children) => h(el.Box, { key: PTT_KEYS.body, flexDirection: 'column' }, ...children)
   const opens = (url) => linkOpens(layout.composition, url)
-  if (!lines.some((one) => hasImageAddress(one))) return box(text(el, 'body', lines.join('\n'), { wrap: 'wrap' }))
+  const imageLine = (one) => segmentsOf(one).some((part) => part.url && opens(part.url))
+  if (lines.every((one) => lineKind(one) === 'plain' && !imageLine(one))) return box(text(el, 'body', lines.join('\n'), { wrap: 'wrap' }))
   const blocks = []
   let run = []
+  let kind = 'plain'
   let images = 0
   let texts = 0
   const flush = () => {
     if (run.length === 0) return
-    blocks.push(h(el.Box, { key: PTT_KEYS.bodyPart(texts) }, text(el, 'body', run.join('\n'), { wrap: 'wrap' })))
+    blocks.push(h(el.Box, { key: PTT_KEYS.bodyPart(texts) }, h(el.Text, { ...BODY_STYLE[kind], wrap: 'wrap' }, run.join('\n'))))
     texts += 1
     run = []
   }
   for (const one of lines) {
-    const segments = segmentsOf(one)
-    if (!segments.some((part) => part.url && opens(part.url))) {
-      run.push(one)
+    if (imageLine(one)) {
+      flush()
+      const style = BODY_STYLE[lineKind(one)]
+      const pieces = segmentsOf(one).map((part) => (part.url && opens(part.url) ? h(el.Link, { href: part.url, label: clip(part.url, 120) }) : h(el.Text, style, part.url ?? part.text)))
+      blocks.push(h(el.Box, { key: PTT_KEYS.image(images), flexDirection: 'row', flexWrap: 'wrap' }, ...pieces))
+      images += 1
       continue
     }
-    flush()
-    const pieces = segments.map((part) => (part.url && opens(part.url) ? h(el.Link, { href: part.url, label: clip(part.url, 120) }) : text(el, 'body', part.url ?? part.text)))
-    blocks.push(h(el.Box, { key: PTT_KEYS.image(images), flexDirection: 'row', flexWrap: 'wrap' }, ...pieces))
-    images += 1
+    const next = lineKind(one)
+    // A blank line stays with the run it is in: it has no colour to change.
+    if (next !== kind && one.trim() !== '') {
+      flush()
+      kind = next
+    }
+    run.push(one)
   }
   flush()
   return box(...blocks)

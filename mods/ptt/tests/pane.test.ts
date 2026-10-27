@@ -13,7 +13,7 @@ import { toFrame } from '../lib/frame.mjs'
 import { createPttFeature } from '../lib/actions.mjs'
 import { boardKey, searchKey } from '../lib/model.mjs'
 import { INITIAL } from '../lib/state.mjs'
-import { PTT_KEYS, PTT_TEXT, PUSH_STYLE } from '../lib/view.mjs'
+import { BODY_STYLE, lineKind, PTT_KEYS, PTT_TEXT, PUSH_STYLE } from '../lib/view.mjs'
 import { articlePage, boardPage, hotPage, row, searchPage } from './fixtures/pages.mjs'
 import { article, boardPage as boardValue, HOT, id, post, PTT_WIDTHS } from './fixtures/values.mjs'
 import { byKey, fakeElements, textOf, treeProblems, walk } from './helpers.ts'
@@ -192,6 +192,26 @@ describe('every screen, both surfaces, 80 / 50 / 30', () => {
       })
     }
   }
+
+  test('a reply: the quote header green, the quoted lines in the quote colour, the reply plain; blank lines stay in their run', () => {
+    expect(['※ 引述《someone (Made Up)》之銘言：', ': quoted line', '：full-width colon', ': : nested', 'reply', '', '※ 發信站'].map(lineKind)).toEqual(['header', 'quote', 'quote', 'quote', 'plain', 'plain', 'plain'])
+    const body = ['※ 引述《someone (Made Up)》之銘言：', ': first quoted', ':', ': second quoted', '', 'my reply line', 'second reply line'].join('\n')
+    const shared = { ...SHARED, [`article:Soft_Job:${ART}`]: article('Soft_Job', ART, { body }) }
+    for (const surface of SURFACES) {
+      const tree = draw({ view: 'article', board: 'Soft_Job', article: ART }, shared, 80, surface)
+      const runs = walk(byKey(tree, PTT_KEYS.body)).filter((n: any) => /^ptt-body-part:\d+$/.test(n.props?.key ?? '')).map((n: any) => {
+        const t = walk(n).find((m: any) => m.type === 'Text')
+        return [t.props.color ?? null, textOf(t)]
+      })
+      expect(runs).toEqual([
+        [BODY_STYLE.header.color, '※ 引述《someone (Made Up)》之銘言：'],
+        [BODY_STYLE.quote.color, ': first quoted\n:\n: second quoted\n'],
+        [null, 'my reply line\nsecond reply line'],
+      ])
+      expect(treeProblems(tree)).toEqual([])
+    }
+    expect(BODY_STYLE.header.color).not.toBe(BODY_STYLE.quote.color)
+  })
 
   test('a push line in PTT colours: 推 bright, 噓 and → red, the user bright yellow, the text yellow, the time dim', () => {
     const tree = draw({ view: 'article', board: 'Soft_Job', article: ART }, SHARED, 80, 'desktop')
