@@ -7,6 +7,7 @@ Mods for Claude Code (CLI and the Desktop app's Code tab), each in its own folde
 | [pillbar](mods/pillbar) | A capsule band above the prompt: the 5-hour and weekly plan usage, this session's context window, and the machine's CPU, memory and disk. |
 | [clawd-run](mods/clawd-run) | While Claude works on a long turn, Clawd plays a side-scrolling platformer above the prompt, with the turn's tokens and cost. |
 | [token-tank](mods/token-tank) | A pixel-art aquarium above the prompt: Claude's turns feed the fish, the fish spit coins onto the sand and you pick them up; a shop, feeding and levels live in a pane (`/fish`). |
+| [ptt](mods/ptt) | A read-only PTT (批踢踢) pane (`/ptt`): the boards you pick and their new posts, a board's posts with a push-count filter, articles with their pushes, and the hot boards. No account; it reads www.ptt.cc's public pages, one at a time. |
 | [plain-narrator](mods/plain-narrator) | A pane where Haiku explains, in plain language, what Claude is doing, with a side chat you can ask using the model you pick (Haiku, Sonnet, Opus, Fable, or the main conversation itself). Off until `/narrator` turns it on: it sends Claude's visible text and tool arguments to Haiku on your own quota. |
 
 pillbar, clawd-run and token-tank share the band above the prompt and stack instead of replacing each other.
@@ -21,7 +22,7 @@ From a terminal session of Claude Code, one line per mod (`y` to add the marketp
 /plugin install token-tank --marketplace SheldonChangL/claude-mods
 ```
 
-From a shell: `claude plugin install token-tank --marketplace SheldonChangL/claude-mods`. The same works for `pillbar`, `clawd-run` and `plain-narrator`.
+From a shell: `claude plugin install token-tank --marketplace SheldonChangL/claude-mods`. The same works for `pillbar`, `clawd-run`, `plain-narrator` and `ptt`.
 
 In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `SheldonChangL/claude-mods`, then **Add plugin**.
 
@@ -51,7 +52,7 @@ claude plugin validate .
 
 ## What they touch
 
-- Nothing leaves your machine except calls to the Claude API through your own Claude Code session, and only plain-narrator makes any (to Haiku, and only after `/narrator`).
+- Nothing leaves your machine except two kinds of request, both through your own Claude Code session: plain-narrator's calls to the Claude API (to Haiku, and only after `/narrator`), and ptt's GETs of www.ptt.cc's public pages (only after `/ptt`, one at a time; see [its README](mods/ptt/README.md#what-it-touches)).
 - token-tank keeps its save in the plugin's own store under `~/.claude`; it reads the `language` row of your settings to pick its words.
 - pillbar runs a small Node child from its own folder that samples CPU, memory and disk; it talks to the private JetDeck daemon only when `PILLBAR_JETDECK_DIR` names it.
 - No mod writes outside `~/.claude`, downloads code, or runs a shell.

@@ -1,6 +1,6 @@
 {
   "name": "claude-mods",
-  "description": "Mods for Claude Code: a usage band, a tamagotchi-style aquarium, a narrator pane and a platformer that plays while Claude works.",
+  "description": "Mods for Claude Code: a usage band, a tamagotchi-style aquarium, a narrator pane, a platformer that plays while Claude works, and a read-only PTT pane.",
   "owner": {
     "name": "Sheldon Chang"
   },
@@ -24,6 +24,11 @@
       "name": "token-tank",
       "source": "./mods/token-tank",
       "description": "A pixel-art aquarium above the prompt: Claude's work feeds the fish, the fish spit coins onto the sand, you pick them up and grow the tank."
+    },
+    {
+      "name": "ptt",
+      "source": "./mods/ptt",
+      "description": "A read-only PTT (批踢踢) pane: boards you pick, their new posts, a push-count filter, articles with their pushes, and the hot boards"
     }
   ]
 }

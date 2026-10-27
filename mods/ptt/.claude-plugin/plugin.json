@@ -1,0 +1,19 @@
+{
+  "name": "ptt",
+  "version": "0.1.0",
+  "description": "A read-only PTT (批踢踢) pane: boards you pick, their new posts, a push-count filter, articles with their pushes, and the hot boards",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Sheldon Chang"
+  },
+  "license": "MIT",
+  "keywords": ["mods", "pane", "ptt"],
+  "userConfig": {
+    "refreshSeconds": {
+      "type": "number",
+      "title": "New posts check (seconds)",
+      "description": "How often your boards are checked for new posts while /ptt has been opened in the session; 60 to 3600, default 300.",
+      "default": 300
+    }
+  }
+}
