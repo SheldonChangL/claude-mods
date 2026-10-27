@@ -13,7 +13,7 @@ import { toFrame } from '../lib/frame.mjs'
 import { createPttFeature } from '../lib/actions.mjs'
 import { boardKey, searchKey } from '../lib/model.mjs'
 import { INITIAL } from '../lib/state.mjs'
-import { PTT_KEYS, PTT_TEXT } from '../lib/view.mjs'
+import { PTT_KEYS, PTT_TEXT, PUSH_STYLE } from '../lib/view.mjs'
 import { articlePage, boardPage, hotPage, row, searchPage } from './fixtures/pages.mjs'
 import { article, boardPage as boardValue, HOT, id, post, PTT_WIDTHS } from './fixtures/values.mjs'
 import { byKey, fakeElements, textOf, treeProblems, walk } from './helpers.ts'
@@ -192,6 +192,24 @@ describe('every screen, both surfaces, 80 / 50 / 30', () => {
       })
     }
   }
+
+  test('a push line in PTT colours: 推 bright, 噓 and → red, the user bright yellow, the text yellow, the time dim', () => {
+    const tree = draw({ view: 'article', board: 'Soft_Job', article: ART }, SHARED, 80, 'desktop')
+    const pushes = (article('Soft_Job', ART) as any).pushes
+    const parts = (i: number) => walk(byKey(tree, PTT_KEYS.push(i))).filter((n: any) => n.type === 'Text').slice(1)
+    for (const tag of ['推', '噓', '→']) {
+      const i = pushes.findIndex((p: any) => p.tag === tag)
+      expect(i).toBeGreaterThanOrEqual(0)
+      const [tagText, user, body, time] = parts(i)
+      expect({ tag, style: tagText.props }).toMatchObject({ tag, style: PUSH_STYLE.tag[tag as '推'] })
+      expect(user.props).toMatchObject({ color: 'warning', bold: true })
+      expect(body.props).toMatchObject({ color: 'warning' })
+      expect(time.props).toMatchObject({ dimColor: true })
+    }
+    expect(PUSH_STYLE.tag['噓']).toMatchObject({ color: 'error' })
+    expect(PUSH_STYLE.tag['→']).toMatchObject({ color: 'error' })
+    expect(PUSH_STYLE.tag['推'].color).toBeUndefined()
+  })
 
   test('a row: the push count in its colour outside the title Button; both lines one hover group', () => {
     const tree = draw({ view: 'board', board: 'Soft_Job', favorites: FAVS }, SHARED, 80, 'desktop')

@@ -409,7 +409,18 @@ function board(el, layout, local, shared, actions) {
 
 // ---- article ----------------------------------------------------------------------
 
-const PUSH_TAG = Object.freeze({ 推: {}, 噓: { color: 'error' }, '→': { dimColor: true } })
+/**
+ * A push line in PTT's own colours: 推 bright, 噓 and → red, the user bright
+ * yellow, the text yellow, the time dim. (PTT's web page: `hl push-tag`,
+ * `f1 hl push-tag`, `f3 hl push-userid`, `f3 push-content`.) Theme names
+ * only: `error` is the red, `warning` the yellow.
+ */
+export const PUSH_STYLE = Object.freeze({
+  tag: Object.freeze({ 推: Object.freeze({ bold: true }), 噓: Object.freeze({ color: 'error', bold: true }), '→': Object.freeze({ color: 'error', bold: true }) }),
+  user: Object.freeze({ color: 'warning', bold: true }),
+  text: Object.freeze({ color: 'warning' }),
+  time: Object.freeze({ dimColor: true }),
+})
 
 function pushLine(el, push, index) {
   const { Text } = el
@@ -417,7 +428,14 @@ function pushLine(el, push, index) {
   return h(
     el.Box,
     { key: PTT_KEYS.push(index) },
-    h(Text, { wrap: 'wrap' }, h(Text, PUSH_TAG[push.tag] ?? {}, `${push.tag} `), h(Text, { bold: true }, clean(push.user, 40)), `: ${clean(push.text, 200)}`, ...(push.time ? [h(Text, { dimColor: true }, `  ${clean(push.time, 20)}`)] : [])),
+    h(
+      Text,
+      { wrap: 'wrap' },
+      h(Text, PUSH_STYLE.tag[push.tag] ?? PUSH_STYLE.tag['→'], `${push.tag} `),
+      h(Text, PUSH_STYLE.user, clean(push.user, 40)),
+      h(Text, PUSH_STYLE.text, `: ${clean(push.text, 200)}`),
+      ...(push.time ? [h(Text, PUSH_STYLE.time, `  ${clean(push.time, 20)}`)] : []),
+    ),
   )
 }
 
