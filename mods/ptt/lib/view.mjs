@@ -10,7 +10,7 @@
 //                                           爆 [問卦] a title              ›
 //   YOUR BOARDS   Hot boards  Manage  ↻        user12 · 10/27
 //   Gossiping                  12 new  ›    38 [新聞] another              ›
-//   [問卦] the newest title                    news99 · 10/27
+//   [問卦] the newest title                    news99 · 10/27 09:12
 //                                           [‹ Older]    latest
 //
 // Everything PTT says (titles, names, text) is other people's text: it goes
@@ -25,7 +25,7 @@ import { action, clip, text } from './ui/primitives.mjs'
 import { Loading } from './ui/status.mjs'
 import { TEXT } from './ui/tokens.mjs'
 import { hasLinkAddress, segmentsOf } from './links.mjs'
-import { articleOf, boardOf, hotOf, newestFirst, newPosts, PUSH_FILTERS, statusOf } from './model.mjs'
+import { articleOf, boardOf, hotOf, newestFirst, newPosts, postedAt, PUSH_FILTERS, statusOf } from './model.mjs'
 import { normalizeLocal, pushShown } from './state.mjs'
 
 export const PTT_KEYS = Object.freeze({
@@ -372,6 +372,15 @@ function hot(el, layout, local, shared, actions) {
 
 // ---- board ------------------------------------------------------------------------
 
+/** The time of day a post went up, HH:MM in Taiwan time (PTT's own), from its id; '' when the id has none. */
+function timeOf(id) {
+  const seconds = postedAt(id)
+  if (seconds === null) return ''
+  const at = new Date((seconds + 8 * 3600) * 1000)
+  const two = (value) => String(value).padStart(2, '0')
+  return `${two(at.getUTCHours())}:${two(at.getUTCMinutes())}`
+}
+
 function postRow(el, layout, local, item, index, actions) {
   if (item.deleted || !item.id) return line(el, PTT_KEYS.deleted(index), 'muted', clip(join(item.title, item.date), 200))
   return navRow(el, layout, {
@@ -379,7 +388,7 @@ function postRow(el, layout, local, item, index, actions) {
     title: item.title || '(no title)',
     lead: item.push ? { text: item.push, style: pushStyle(item.push) } : null,
     leadWidth: 2,
-    secondary: join(item.author, item.date, item.pinned ? PTT_TEXT.pinned : ''),
+    secondary: join(item.author, [item.date, timeOf(item.id)].filter(Boolean).join(' '), item.pinned ? PTT_TEXT.pinned : ''),
     press: { key: PTT_KEYS.openPost(item.id), onPress: () => actions.openArticle(item.id) },
     local,
   })

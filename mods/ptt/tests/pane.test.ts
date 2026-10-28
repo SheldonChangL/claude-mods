@@ -239,4 +239,11 @@ describe('every screen, both surfaces, 80 / 50 / 30', () => {
     expect(textOf(byKey(tree, key))).toBe('[問題] made-up question number 5')
     expect(byKey(tree, `${key}:sub`).props.hover.scope).toBe(byKey(tree, key).props.hover.scope)
   })
+
+  test("a row's second line: the author, PTT's date and the time it went up, in Taiwan time, from its id", () => {
+    // post(5) is M.1791938400: 2026-10-14 00:40 UTC, 08:40 in Taiwan.
+    expect(post(5).id).toBe('M.1791938400.A.105')
+    const tree = draw({ view: 'board', board: 'Soft_Job', favorites: FAVS }, SHARED, 80, 'desktop')
+    expect(textOf(byKey(tree, `${PTT_KEYS.openPost(post(5).id)}:sub`))).toBe('user5 · 10/14 08:40')
+  })
 })
