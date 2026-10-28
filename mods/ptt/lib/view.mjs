@@ -78,6 +78,7 @@ export const PTT_KEYS = Object.freeze({
   bodyPart: (index) => `ptt-body-part:${index}`,
   image: (index) => `ptt-image:${index}`,
   more: 'ptt-more',
+  morePushes: 'ptt-more-pushes',
   pushesHead: 'ptt-pushes-head',
   pushes: 'ptt-pushes',
   push: (index) => `ptt-push:${index}`,
@@ -119,8 +120,9 @@ export const PTT_TEXT = Object.freeze({
   openOnPtt: 'ptt.cc',
   linkNote: 'Links open outside this pane: Copy link instead.',
   showMore: (n) => `Show all (${n} more line${n === 1 ? '' : 's'})`,
-  showAll: 'Show all',
   showLess: 'Show less',
+  morePushes: (n) => `Show ${n} more push${n === 1 ? '' : 'es'}`,
+  fewerPushes: 'Show fewer pushes',
   pushes: 'Pushes',
   pushCounts: (c) => `推 ${c.up} · 噓 ${c.down} · → ${c.arrow}`,
   noPushes: 'No pushes yet.',
@@ -546,21 +548,26 @@ function article(el, layout, local, shared, actions) {
   const shownLines = local.full ? lines : lines.slice(0, BODY_LINES)
   parts.push(bodyOf(el, layout, shownLines))
   const hiddenLines = lines.length - shownLines.length
-  const hiddenPushes = local.full ? 0 : Math.max(0, Math.min(value.pushes.length, PUSHES_MAX) - PUSHES_SHOWN)
-  if (local.full || hiddenLines > 0 || hiddenPushes > 0) {
-    const label = local.full ? PTT_TEXT.showLess : hiddenLines > 0 ? PTT_TEXT.showMore(hiddenLines) : PTT_TEXT.showAll
+  // The body's own control: it says what it opens (lines), and opens only the body.
+  if (local.full || hiddenLines > 0) {
+    const label = local.full ? PTT_TEXT.showLess : PTT_TEXT.showMore(hiddenLines)
     parts.push(h(el.Box, { key: `${PTT_KEYS.more}:box` }, quiet(el, local, { key: PTT_KEYS.more, label, onPress: actions.toggleFull })))
   }
   if (value.bodyCut && local.full) parts.push(line(el, `${PTT_KEYS.body}:cut`, 'muted', PTT_TEXT.bodyCut, 'wrap'))
-  const pushes = value.pushes.slice(0, local.full ? PUSHES_MAX : PUSHES_SHOWN)
+  // The pushes: the first PUSHES_SHOWN, then their own control at the end of the list.
+  const available = Math.min(value.pushes.length, PUSHES_MAX)
+  const pushes = value.pushes.slice(0, local.allPushes ? PUSHES_MAX : PUSHES_SHOWN)
+  const hiddenPushes = available - pushes.length
   const notShown = value.pushesCut + Math.max(0, value.pushes.length - PUSHES_MAX)
+  const pushesControl = hiddenPushes > 0 ? PTT_TEXT.morePushes(hiddenPushes) : local.allPushes && available > PUSHES_SHOWN ? PTT_TEXT.fewerPushes : null
   parts.push(
     h(
       el.Box,
       { key: PTT_KEYS.pushes, flexDirection: 'column' },
       bar(el, layout, PTT_KEYS.pushesHead, [caption(el, layout, PTT_TEXT.pushes)], [text(el, 'meta', PTT_TEXT.pushCounts(value.counts))]),
       ...(pushes.length === 0 ? [line(el, `${PTT_KEYS.pushes}:none`, 'muted', PTT_TEXT.noPushes)] : pushes.map((push, index) => pushLine(el, push, index))),
-      ...(local.full && notShown > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(notShown), 'wrap')] : []),
+      ...(pushesControl ? [h(el.Box, { key: `${PTT_KEYS.morePushes}:box` }, quiet(el, local, { key: PTT_KEYS.morePushes, label: pushesControl, onPress: actions.togglePushes }))] : []),
+      ...(local.allPushes && notShown > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(notShown), 'wrap')] : []),
     ),
   )
   parts.push(bottom(el, layout, local, actions, PTT_TEXT.backTo.board(local.board)))

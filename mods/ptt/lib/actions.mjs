@@ -16,7 +16,7 @@
 // as new.
 
 import { BOARD, FAVORITES_MAX, PUSH_FILTERS, badgeOf, boardOf, lookupOf, lookupKey, newestPostedAt, wantKey } from './model.mjs'
-import { backToBoard, goHome, goHot, goManage, INITIAL, normalizeLocal, openArticle, openBoard, pressRefresh, pushShown, toggleFull, toPage, typed, WANT_TOKEN, wantOf, withFavorites, withNotice, withPush } from './state.mjs'
+import { backToBoard, goHome, goHot, goManage, INITIAL, normalizeLocal, openArticle, openBoard, pressRefresh, pushShown, toggleFull, togglePushes, toPage, typed, WANT_TOKEN, wantOf, withFavorites, withNotice, withPush } from './state.mjs'
 import { changeFavorites, hasBoard, moved, readFavorites } from './storage.mjs'
 import { PTT_KEYS, PTT_TEXT, renderPtt } from './view.mjs'
 
@@ -316,6 +316,7 @@ export function createPttFeature({ configured = false } = {}) {
         await syncWant(ctx)
       },
       toggleFull: (ctx) => move(ctx, toggleFull, PTT_KEYS.more),
+      togglePushes: (ctx) => move(ctx, togglePushes, PTT_KEYS.morePushes),
       // Back to the top of the pane (it has no fixed header).
       top: async (ctx) => {
         await ctx.ui.scrollTop()

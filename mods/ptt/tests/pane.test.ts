@@ -178,6 +178,7 @@ describe('every screen, both surfaces, 80 / 50 / 30', () => {
     ['board filtered', { view: 'board', board: 'Soft_Job', push: 30 }],
     ['article', { view: 'article', board: 'Soft_Job', article: ART }],
     ['article full', { view: 'article', board: 'Soft_Job', article: ART, full: true }],
+    ['article all pushes', { view: 'article', board: 'Soft_Job', article: ART, allPushes: true }],
   ]
   for (const surface of SURFACES) {
     for (const columns of PTT_WIDTHS) {

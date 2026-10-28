@@ -17,7 +17,7 @@ From a shell: `claude plugin install ptt --marketplace SheldonChangL/claude-mods
 - `/ptt` opens the pane; `/ptt close` closes it.
 - **Your boards.** Type a board name in the field (`soft_job` is fine) and press Enter: PTT is asked whether the board exists and how it is spelt, and it is kept under that spelling (`Soft_Job`). Or pick one from **Hot boards**. Each board shows its newest post and how many posts are new since you last opened it. **Manage** reorders and removes boards; **↻** reads them again now.
 - **A board.** Its posts, newest first: the push count in PTT's colours (爆 red, 10-99 yellow, 1-9 green, X dim), the title, and author and date under it; either line opens the post. **All · 10+ · 30+ · 50+ · 爆** filters the whole board by push count (PTT's own search). **‹ Older** and **Newer ›** page through it.
-- **An article.** Title, author and time, the text (30 lines, then **Show all**) and the pushes (`推 · 噓 · →` counts). **Copy link** puts its ptt.cc address on the clipboard; an https address in the text (an image, a video, a page) opens in your browser; an http one stays text. Nothing in the pane is fetched from anywhere but ptt.cc, and no image is downloaded or shown.
+- **An article.** Title, author and time, the text (30 lines, then **Show all**) and the pushes (`推 · 噓 · →` counts; 30, then **Show N more pushes** at the end of the list, up to 300). **Copy link** puts its ptt.cc address on the clipboard; an https address in the text (an image, a video, a page) opens in your browser; an http one stays text. Nothing in the pane is fetched from anywhere but ptt.cc, and no image is downloaded or shown.
 
 The pane is drawn for a narrow side pane first (the desktop app's), and works the same in a fullscreen terminal.
 
