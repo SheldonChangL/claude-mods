@@ -13,7 +13,7 @@
 //   input       what is typed in Add a board
 //   lookup      a board name PTT is being asked about for Add, or null
 //   full        the article's body shown whole (Show all)
-//   allPushes   the article's pushes shown whole (Show N more pushes)
+//   pushPage    which page of the article's pushes is shown (0 first; PUSH_PAGE a page)
 //   wantToken   this session's want key (want:<token>); made on first use
 //   refreshAt   when Refresh was last pressed (ms), or null
 //   wantError   why the last want could not be written: null | 'unreachable' | 'refused' | 'failed',
@@ -36,8 +36,8 @@ export const INITIAL = Object.freeze({
   favorites: Object.freeze([]),
   input: '',
   lookup: null,
-  full: false, allPushes: false,
-  allPushes: false,
+  full: false,
+  pushPage: 0,
   wantToken: null,
   refreshAt: null,
   wantError: null,
@@ -81,7 +81,7 @@ export function normalizeLocal(local) {
     input: typeof raw.input === 'string' ? raw.input.slice(0, 40) : '',
     lookup: typeof raw.lookup === 'string' && BOARD.test(raw.lookup) ? raw.lookup : null,
     full: raw.full === true,
-    allPushes: raw.allPushes === true,
+    pushPage: Number.isSafeInteger(raw.pushPage) && raw.pushPage >= 0 && raw.pushPage < 1000 ? raw.pushPage : 0,
     wantToken: typeof raw.wantToken === 'string' && WANT_TOKEN.test(raw.wantToken) ? raw.wantToken : null,
     refreshAt: pressAt(raw.refreshAt),
     wantError: ['unreachable', 'refused', 'failed', 'filter'].includes(raw.wantError) ? raw.wantError : null,
@@ -92,20 +92,21 @@ export function normalizeLocal(local) {
 
 const at = (local, change) => ({ ...normalizeLocal(local), ...change })
 
-export const goHome = (local, focus) => at(local, { view: 'home', board: null, page: null, push: null, article: null, full: false, allPushes: false, focus })
-export const goHot = (local, focus) => at(local, { view: 'hot', board: null, page: null, push: null, article: null, full: false, allPushes: false, notice: '', focus })
+export const goHome = (local, focus) => at(local, { view: 'home', board: null, page: null, push: null, article: null, full: false, pushPage: 0, focus })
+export const goHot = (local, focus) => at(local, { view: 'hot', board: null, page: null, push: null, article: null, full: false, pushPage: 0, notice: '', focus })
 export const goManage = (local, focus) => at(local, { view: 'manage', notice: '', focus })
-export const openBoard = (local, board, from, focus) => at(local, { view: 'board', board, page: null, push: null, article: null, from: from === 'hot' ? 'hot' : 'home', full: false, allPushes: false, notice: '', focus })
+export const openBoard = (local, board, from, focus) => at(local, { view: 'board', board, page: null, push: null, article: null, from: from === 'hot' ? 'hot' : 'home', full: false, pushPage: 0, notice: '', focus })
 /** A push-count filter (or null for all): the newest page of it. */
-export const withPush = (local, push, focus) => at(local, { view: 'board', push: PUSH_FILTERS.includes(push) ? push : null, page: null, article: null, full: false, allPushes: false, focus })
-export const toPage = (local, page, focus) => at(local, { view: 'board', page: page ?? null, article: null, full: false, allPushes: false, focus })
-export const openArticle = (local, id, focus) => at(local, { view: 'article', article: id, full: false, allPushes: false, focus })
-export const backToBoard = (local, focus) => at(local, { view: 'board', article: null, full: false, allPushes: false, focus })
+export const withPush = (local, push, focus) => at(local, { view: 'board', push: PUSH_FILTERS.includes(push) ? push : null, page: null, article: null, full: false, pushPage: 0, focus })
+export const toPage = (local, page, focus) => at(local, { view: 'board', page: page ?? null, article: null, full: false, pushPage: 0, focus })
+export const openArticle = (local, id, focus) => at(local, { view: 'article', article: id, full: false, pushPage: 0, focus })
+export const backToBoard = (local, focus) => at(local, { view: 'board', article: null, full: false, pushPage: 0, focus })
 export const typed = (local, value) => at(local, { input: typeof value === 'string' ? value.slice(0, 40) : '' })
 export const withNotice = (local, notice, focus) => at(local, { notice, focus: focus === undefined ? normalizeLocal(local).focus : focus })
 export const withFavorites = (local, favorites) => at(local, { favorites: normalizeFavorites(favorites) })
 export const toggleFull = (local, focus) => at(local, { full: !normalizeLocal(local).full, focus })
-export const togglePushes = (local, focus) => at(local, { allPushes: !normalizeLocal(local).allPushes, focus })
+/** A page of the article's pushes (0 the first), never below 0. */
+export const toPushPage = (local, page, focus) => at(local, { pushPage: Math.max(0, Math.floor(page) || 0), focus })
 export const pressRefresh = (local, when, focus) => at(local, { refreshAt: pressAt(when) ?? normalizeLocal(local).refreshAt, notice: '', focus })
 
 /** The push filter the board shows: none while the service cannot filter (wantError 'filter'). */

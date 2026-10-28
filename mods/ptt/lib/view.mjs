@@ -78,7 +78,10 @@ export const PTT_KEYS = Object.freeze({
   bodyPart: (index) => `ptt-body-part:${index}`,
   image: (index) => `ptt-image:${index}`,
   more: 'ptt-more',
-  morePushes: 'ptt-more-pushes',
+  pushPaging: 'ptt-push-paging',
+  pushPrev: 'ptt-push-prev',
+  pushNext: 'ptt-push-next',
+  pushRange: 'ptt-push-range',
   pushesHead: 'ptt-pushes-head',
   pushes: 'ptt-pushes',
   push: (index) => `ptt-push:${index}`,
@@ -121,8 +124,9 @@ export const PTT_TEXT = Object.freeze({
   linkNote: 'Links open outside this pane: Copy link instead.',
   showMore: (n) => `Show all (${n} more line${n === 1 ? '' : 's'})`,
   showLess: 'Show less',
-  morePushes: (n) => `Show ${n} more push${n === 1 ? '' : 'es'}`,
-  fewerPushes: 'Show fewer pushes',
+  pushPrev: '‹ Previous',
+  pushNext: 'Next ›',
+  pushRange: (from, to, total) => `${from}–${to} of ${total}`,
   pushes: 'Pushes',
   pushCounts: (c) => `推 ${c.up} · 噓 ${c.down} · → ${c.arrow}`,
   noPushes: 'No pushes yet.',
@@ -156,8 +160,8 @@ export function explain(code) {
 /** The body's lines shown before Show all. */
 export const BODY_LINES = 30
 /** Pushes shown before Show all, and at most with it. */
-export const PUSHES_SHOWN = 30
-export const PUSHES_MAX = 300
+/** Pushes on one page: the article's tree stays this size however many pushes it has (300 at once froze Claude Desktop). */
+export const PUSH_PAGE = 30
 
 /** PTT's own push-count colours: 爆 red, 10-99 yellow, 1-9 green, X (more boos) dim. */
 export function pushStyle(push) {
@@ -552,20 +556,29 @@ function article(el, layout, local, shared, actions) {
     parts.push(h(el.Box, { key: `${PTT_KEYS.more}:box` }, quiet(el, local, { key: PTT_KEYS.more, label, onPress: actions.toggleFull })))
   }
   if (value.bodyCut && local.full) parts.push(line(el, `${PTT_KEYS.body}:cut`, 'muted', PTT_TEXT.bodyCut, 'wrap'))
-  // The pushes: the first PUSHES_SHOWN, then their own control at the end of the list.
-  const available = Math.min(value.pushes.length, PUSHES_MAX)
-  const pushes = value.pushes.slice(0, local.allPushes ? PUSHES_MAX : PUSHES_SHOWN)
-  const hiddenPushes = available - pushes.length
-  const notShown = value.pushesCut + Math.max(0, value.pushes.length - PUSHES_MAX)
-  const pushesControl = hiddenPushes > 0 ? PTT_TEXT.morePushes(hiddenPushes) : local.allPushes && available > PUSHES_SHOWN ? PTT_TEXT.fewerPushes : null
+  // The pushes, a page at a time (PUSH_PAGE), with Previous / Next under them.
+  const total = value.pushes.length
+  const pages = Math.max(1, Math.ceil(total / PUSH_PAGE))
+  const page = Math.min(local.pushPage, pages - 1)
+  const start = page * PUSH_PAGE
+  const pushes = value.pushes.slice(start, start + PUSH_PAGE)
+  const paging = pages > 1
+    ? bar(
+        el,
+        layout,
+        PTT_KEYS.pushPaging,
+        [page > 0 ? quiet(el, local, { key: PTT_KEYS.pushPrev, label: PTT_TEXT.pushPrev, onPress: () => actions.pushPage('prev') }) : null, h(el.Box, { key: PTT_KEYS.pushRange }, text(el, 'meta', PTT_TEXT.pushRange(start + 1, start + pushes.length, total)))],
+        [page < pages - 1 ? quiet(el, local, { key: PTT_KEYS.pushNext, label: PTT_TEXT.pushNext, dim: false, onPress: () => actions.pushPage('next') }) : null],
+      )
+    : null
   parts.push(
     h(
       el.Box,
       { key: PTT_KEYS.pushes, flexDirection: 'column' },
       bar(el, layout, PTT_KEYS.pushesHead, [caption(el, layout, PTT_TEXT.pushes)], [text(el, 'meta', PTT_TEXT.pushCounts(value.counts))]),
-      ...(pushes.length === 0 ? [line(el, `${PTT_KEYS.pushes}:none`, 'muted', PTT_TEXT.noPushes)] : pushes.map((push, index) => pushLine(el, layout, push, index))),
-      ...(pushesControl ? [h(el.Box, { key: `${PTT_KEYS.morePushes}:box` }, quiet(el, local, { key: PTT_KEYS.morePushes, label: pushesControl, onPress: actions.togglePushes }))] : []),
-      ...(local.allPushes && notShown > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(notShown), 'wrap')] : []),
+      ...(pushes.length === 0 ? [line(el, `${PTT_KEYS.pushes}:none`, 'muted', PTT_TEXT.noPushes)] : pushes.map((push, index) => pushLine(el, layout, push, start + index))),
+      ...(page === pages - 1 && value.pushesCut > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(value.pushesCut), 'wrap')] : []),
+      ...(paging ? [paging] : []),
     ),
   )
   parts.push(bottom(el, layout, local, actions, PTT_TEXT.backTo.board(local.board)))

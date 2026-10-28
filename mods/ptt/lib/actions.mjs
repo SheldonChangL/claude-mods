@@ -15,10 +15,10 @@
 // needs no check. A board's posts newer than when it was last opened count
 // as new.
 
-import { BOARD, FAVORITES_MAX, PUSH_FILTERS, badgeOf, boardOf, lookupOf, lookupKey, newestPostedAt, wantKey } from './model.mjs'
-import { backToBoard, goHome, goHot, goManage, INITIAL, normalizeLocal, openArticle, openBoard, pressRefresh, pushShown, toggleFull, togglePushes, toPage, typed, WANT_TOKEN, wantOf, withFavorites, withNotice, withPush } from './state.mjs'
+import { BOARD, FAVORITES_MAX, PUSH_FILTERS, articleOf, badgeOf, boardOf, lookupOf, lookupKey, newestPostedAt, wantKey } from './model.mjs'
+import { backToBoard, goHome, goHot, goManage, INITIAL, normalizeLocal, openArticle, openBoard, pressRefresh, pushShown, toggleFull, toPushPage, toPage, typed, WANT_TOKEN, wantOf, withFavorites, withNotice, withPush } from './state.mjs'
 import { changeFavorites, hasBoard, moved, readFavorites } from './storage.mjs'
-import { PTT_KEYS, PTT_TEXT, renderPtt } from './view.mjs'
+import { PTT_KEYS, PTT_TEXT, PUSH_PAGE, renderPtt } from './view.mjs'
 
 /** How long Add waits for PTT to answer a board name check. */
 export const LOOKUP_WAIT_MS = 15000
@@ -316,7 +316,17 @@ export function createPttFeature({ configured = false } = {}) {
         await syncWant(ctx)
       },
       toggleFull: (ctx) => move(ctx, toggleFull, PTT_KEYS.more),
-      togglePushes: (ctx) => move(ctx, togglePushes, PTT_KEYS.morePushes),
+      // A page of the pushes: 'prev' or 'next', kept within the article's pushes; the pane goes back to the Pushes heading.
+      pushPage: async (ctx, { value }) => {
+        const local = normalizeLocal(await ctx.state.get())
+        if (local.view !== 'article') return
+        const total = articleOf(await ctx.shared.snapshot(), local.board, local.article)?.pushes.length ?? 0
+        const last = Math.max(0, Math.ceil(total / PUSH_PAGE) - 1)
+        const page = Math.min(last, Math.max(0, local.pushPage + (value === 'prev' ? -1 : 1)))
+        if (page === local.pushPage) return
+        await move(ctx, (state, focus) => toPushPage(state, page, focus), value === 'prev' && page > 0 ? PTT_KEYS.pushPrev : page < last ? PTT_KEYS.pushNext : PTT_KEYS.pushPrev)
+        await ctx.ui.scrollTo(PTT_KEYS.pushesHead)
+      },
       // Back to the top of the pane (it has no fixed header).
       top: async (ctx) => {
         await ctx.ui.scrollTop()
