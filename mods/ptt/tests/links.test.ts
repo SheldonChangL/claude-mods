@@ -10,7 +10,7 @@ import { toFrame } from '../lib/frame.mjs'
 import { isLinkAddress, segmentsOf } from '../lib/links.mjs'
 import { PTT_KEYS } from '../lib/view.mjs'
 import { article, id } from './fixtures/values.mjs'
-import { byKey, fakeElements, treeProblems, walk } from './helpers.ts'
+import { byKey, fakeElements, textOf, treeProblems, walk } from './helpers.ts'
 
 describe('which addresses are links', () => {
   test('any https address with a plain host; nothing else', () => {
@@ -44,7 +44,7 @@ test('the article draws every https address as a Link, on both surfaces; http st
   }
 })
 
-test('long screens end with a Back of their own: the article with ↑ Top as well, the board in its paging row', () => {
+test('long screens end with ↑ Top and a quiet Back that names where it goes, apart from Older / Newer', () => {
   const el = fakeElements()
   const actions = new Proxy({}, { get: () => () => {} })
   const feature = createPttFeature({ configured: true })
@@ -52,15 +52,19 @@ test('long screens end with a Back of their own: the article with ↑ Top as wel
   for (const surface of ['terminal', 'desktop']) {
     const frame = toFrame({ surface, props: { bodyColumns: 60 } })
     const read = feature.render({ local: { view: 'article', board: 'Soft_Job', article: ART }, shared: { [`article:Soft_Job:${ART}`]: article('Soft_Job', ART) } }, el, frame, actions)
-    const bottom = byKey(read, PTT_KEYS.bottom)
-    expect(walk(bottom).filter((n: any) => n.type === 'Button').map((n: any) => n.props.key)).toEqual([PTT_KEYS.backBottom, PTT_KEYS.top])
-    // The bottom row is the last thing drawn.
     const root: any = read
-    const last = root.props.children[root.props.children.length - 1]
-    expect(last.props.key).toBe(PTT_KEYS.bottom)
-    const list = feature.render({ local: { view: 'board', board: 'Soft_Job' }, shared: {} }, el, frame, actions)
-    expect(byKey(byKey(list, PTT_KEYS.paging), PTT_KEYS.backBottom)?.type).toBe('Button')
+    expect(root.props.children[root.props.children.length - 1].props.key).toBe(PTT_KEYS.bottom)
+    expect(walk(byKey(read, PTT_KEYS.bottom)).filter((n: any) => n.type === 'Button').map((n: any) => [n.props.key, textOf(n), n.props.plain === true, n.props.dimColor === true])).toEqual([
+      [PTT_KEYS.top, '↑ Top', true, true],
+      [PTT_KEYS.backBottom, 'Back to Soft_Job', true, true],
+    ])
+    for (const [from, label] of [['home', 'Back to your boards'], ['hot', 'Back to hot boards']]) {
+      const list = feature.render({ local: { view: 'board', board: 'Soft_Job', from }, shared: {} }, el, frame, actions)
+      // The paging row holds Older / Newer only; Back is the quiet text below it.
+      expect(byKey(byKey(list, PTT_KEYS.paging), PTT_KEYS.backBottom)).toBeUndefined()
+      expect(textOf(byKey(list, PTT_KEYS.backBottom))).toBe(label)
+      expect(treeProblems(list)).toEqual([])
+    }
     expect(treeProblems(read)).toEqual([])
-    expect(treeProblems(list)).toEqual([])
   }
 })

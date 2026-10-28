@@ -100,6 +100,7 @@ export const PTT_TEXT = Object.freeze({
   addBoard: (name) => `Add ${name} to your boards`,
   back: '‹ Back',
   top: '↑ Top',
+  backTo: Object.freeze({ boards: 'Back to your boards', hot: 'Back to hot boards', board: (name) => `Back to ${name}` }),
   done: 'Done',
   up: (name) => `Move ${name} up`,
   down: (name) => `Move ${name} down`,
@@ -257,7 +258,15 @@ function noteOf(local, shared, value, { home = false } = {}) {
 
 const noteLine = (el, note) => line(el, PTT_KEYS.note, note.role, note.text, 'wrap')
 const caption = (el, layout, label) => text(el, 'section', layout.composition.captionCase === 'upper' ? label.toUpperCase() : label)
-const back = (el, layout, local, onPress, key = PTT_KEYS.back) => action(el, { key, label: PTT_TEXT.back, autoFocus: local.focus === key, onPress }, layout)
+const back = (el, layout, local, onPress) => action(el, { key: PTT_KEYS.back, label: PTT_TEXT.back, autoFocus: local.focus === PTT_KEYS.back, onPress }, layout)
+
+/**
+ * The last row of a long screen (the pane has no fixed header): ↑ Top and a
+ * Back that names where it goes, both quiet text, so neither reads as the
+ * Older / Newer buttons above them.
+ */
+const bottom = (el, layout, local, actions, backLabel) =>
+  bar(el, layout, PTT_KEYS.bottom, [quiet(el, local, { key: PTT_KEYS.top, label: PTT_TEXT.top, onPress: actions.top })], [quiet(el, local, { key: PTT_KEYS.backBottom, label: backLabel, onPress: actions.back })])
 const refresh = (el, local, actions) => quiet(el, local, { key: PTT_KEYS.refresh, label: PTT_TEXT.refresh, glyph: '↻', onPress: actions.refresh })
 const heading = (el, label) => h(el.Box, { key: PTT_KEYS.heading, flexShrink: 1, minWidth: 0 }, text(el, 'heading', clip(label, 120), { wrap: 'truncate-end' }))
 
@@ -404,10 +413,10 @@ function board(el, layout, local, shared, actions) {
       el,
       layout,
       PTT_KEYS.paging,
-      // A Back down here too: the pane has no fixed header, and the list is long.
-      [back(el, layout, local, actions.back, PTT_KEYS.backBottom), value?.prev ? action(el, { key: PTT_KEYS.older, label: PTT_TEXT.older, autoFocus: local.focus === PTT_KEYS.older, onPress: actions.older }, layout) : null, h(el.Box, { key: PTT_KEYS.pageLabel }, text(el, 'meta', push ? PTT_TEXT.filteredPage(push, local.page === null ? null : pageNumber) : local.page === null ? PTT_TEXT.latest : PTT_TEXT.pageOf(pageNumber)))],
+      [value?.prev ? action(el, { key: PTT_KEYS.older, label: PTT_TEXT.older, autoFocus: local.focus === PTT_KEYS.older, onPress: actions.older }, layout) : null, h(el.Box, { key: PTT_KEYS.pageLabel }, text(el, 'meta', push ? PTT_TEXT.filteredPage(push, local.page === null ? null : pageNumber) : local.page === null ? PTT_TEXT.latest : PTT_TEXT.pageOf(pageNumber)))],
       [local.page !== null ? action(el, { key: PTT_KEYS.newer, label: PTT_TEXT.newer, autoFocus: local.focus === PTT_KEYS.newer, onPress: actions.newer }, layout) : null],
     ),
+    bottom(el, layout, local, actions, local.from === 'hot' ? PTT_TEXT.backTo.hot : PTT_TEXT.backTo.boards),
   )
   return parts
 }
@@ -554,8 +563,7 @@ function article(el, layout, local, shared, actions) {
       ...(local.full && notShown > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(notShown), 'wrap')] : []),
     ),
   )
-  // The pane has no fixed header: Back and a way to the top at the end too.
-  parts.push(bar(el, layout, PTT_KEYS.bottom, [back(el, layout, local, actions.back, PTT_KEYS.backBottom)], [quiet(el, local, { key: PTT_KEYS.top, label: PTT_TEXT.top, onPress: actions.top })]))
+  parts.push(bottom(el, layout, local, actions, PTT_TEXT.backTo.board(local.board)))
   return parts
 }
 
