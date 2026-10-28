@@ -52,3 +52,24 @@ test('few pushes or a short body: no control for them; pushes cut by the service
   const cut = draw({ allPushes: true }, { pushesCut: 12 })
   expect(textOf(byKey(cut, PTT_KEYS.pushesNote))).toBe(PTT_TEXT.pushesCut(12))
 })
+
+test('a push with an https address draws it as a Link with its words around it; other pushes stay one Text', () => {
+  const pushes = [
+    { tag: '推', user: 'u1', text: 'https://i.example.com/ZbC.png 好看', time: '10/28 08:30' },
+    { tag: '→', user: 'u2', text: '只是文字', time: '10/28 08:31' },
+    { tag: '推', user: 'u3', text: 'http://i.example.com/old.jpg', time: '' },
+  ]
+  for (const surface of ['terminal', 'desktop']) {
+    const tree = draw({}, { pushes }, surface)
+    const first = byKey(tree, PTT_KEYS.push(0))
+    expect(walk(first).filter((n: any) => n.type === 'Link').map((n: any) => n.props.href)).toEqual(['https://i.example.com/ZbC.png'])
+    expect(textOf(first).replace(/\s+/g, ' ').trim()).toBe('推 u1 : 好看 10/28 08:30')
+    expect(first.props.flexWrap).toBe('wrap')
+    for (const index of [1, 2]) {
+      const plain: any = byKey(tree, PTT_KEYS.push(index))
+      expect(walk(plain).some((n: any) => n.type === 'Link')).toBe(false)
+      expect(plain.props.flexWrap).toBeUndefined()
+    }
+    expect(treeProblems(tree)).toEqual([])
+  }
+})

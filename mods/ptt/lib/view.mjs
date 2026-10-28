@@ -438,28 +438,26 @@ export const PUSH_STYLE = Object.freeze({
   time: Object.freeze({ dimColor: true }),
 })
 
-function pushLine(el, push, index) {
+/**
+ * One push. A push whose text holds an https address (where the surface
+ * opens links) is drawn as a wrapping row of its parts with the address as a
+ * Link; any other push stays one Text, as PTT draws it.
+ */
+function pushLine(el, layout, push, index) {
   const { Text } = el
   const clean = (value, max) => sanitizeText(value, { max, singleLine: true })
-  return h(
-    el.Box,
-    { key: PTT_KEYS.push(index) },
-    h(
-      Text,
-      { wrap: 'wrap' },
-      h(Text, PUSH_STYLE.tag[push.tag] ?? PUSH_STYLE.tag['→'], `${push.tag} `),
-      h(Text, PUSH_STYLE.user, clean(push.user, 40)),
-      h(Text, PUSH_STYLE.text, `: ${clean(push.text, 200)}`),
-      ...(push.time ? [h(Text, PUSH_STYLE.time, `  ${clean(push.time, 20)}`)] : []),
-    ),
-  )
+  const said = clean(push.text, 200)
+  const tag = h(Text, PUSH_STYLE.tag[push.tag] ?? PUSH_STYLE.tag['→'], `${push.tag} `)
+  const user = h(Text, PUSH_STYLE.user, clean(push.user, 40))
+  const time = push.time ? [h(Text, PUSH_STYLE.time, `  ${clean(push.time, 20)}`)] : []
+  const segments = segmentsOf(said)
+  if (!segments.some((part) => part.url && linkOpens(layout.composition, part.url))) {
+    return h(el.Box, { key: PTT_KEYS.push(index) }, h(Text, { wrap: 'wrap' }, tag, user, h(Text, PUSH_STYLE.text, `: ${said}`), ...time))
+  }
+  const pieces = segments.map((part) => (part.url && linkOpens(layout.composition, part.url) ? h(el.Link, { href: part.url, label: clip(part.url, 120) }) : h(Text, PUSH_STYLE.text, part.url ?? part.text)))
+  return h(el.Box, { key: PTT_KEYS.push(index), flexDirection: 'row', flexWrap: 'wrap' }, h(Text, {}, tag, user, h(Text, PUSH_STYLE.text, ': ')), ...pieces, ...time)
 }
 
-/**
- * The article's text. Where links open, a line holding an https image
- * address draws it as a Link to the browser (never fetched, never shown);
- * the other lines stay plain text, run together as one Text as before.
- */
 /**
  * What a body line is, for its colour: PTT draws a quote's header
  * (`※ 引述《someone》之銘言：`) green and the quoted lines (`: …`) cyan, so a
@@ -565,7 +563,7 @@ function article(el, layout, local, shared, actions) {
       el.Box,
       { key: PTT_KEYS.pushes, flexDirection: 'column' },
       bar(el, layout, PTT_KEYS.pushesHead, [caption(el, layout, PTT_TEXT.pushes)], [text(el, 'meta', PTT_TEXT.pushCounts(value.counts))]),
-      ...(pushes.length === 0 ? [line(el, `${PTT_KEYS.pushes}:none`, 'muted', PTT_TEXT.noPushes)] : pushes.map((push, index) => pushLine(el, push, index))),
+      ...(pushes.length === 0 ? [line(el, `${PTT_KEYS.pushes}:none`, 'muted', PTT_TEXT.noPushes)] : pushes.map((push, index) => pushLine(el, layout, push, index))),
       ...(pushesControl ? [h(el.Box, { key: `${PTT_KEYS.morePushes}:box` }, quiet(el, local, { key: PTT_KEYS.morePushes, label: pushesControl, onPress: actions.togglePushes }))] : []),
       ...(local.allPushes && notShown > 0 ? [line(el, PTT_KEYS.pushesNote, 'muted', PTT_TEXT.pushesCut(notShown), 'wrap')] : []),
     ),
