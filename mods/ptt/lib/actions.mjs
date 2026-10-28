@@ -316,6 +316,11 @@ export function createPttFeature({ configured = false } = {}) {
         await syncWant(ctx)
       },
       toggleFull: (ctx) => move(ctx, toggleFull, PTT_KEYS.more),
+      // Back to the top of the pane (it has no fixed header).
+      top: async (ctx) => {
+        await ctx.ui.scrollTop()
+        await ctx.ui.focus(PTT_KEYS.back)
+      },
       // The push-count filter: 'all' or 10 / 30 / 50 / 100; the newest page of it.
       filterPush: async (ctx, { value }) => {
         const local = normalizeLocal(await ctx.state.get())

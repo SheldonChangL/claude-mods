@@ -162,6 +162,11 @@ export function createApp({ refreshSeconds = 300, version = 'unknown', limits = 
         every: (ms, fn) => track(p.clock.every(ms, fn)),
       },
       ui: {
+        scrollTop: async () => {
+          try {
+            await p.ui.scroll({ in: PANE_ID, to: 'start' })
+          } catch {}
+        },
         focus: async (key) => {
           try {
             const moved = await p.ui.focus(key)

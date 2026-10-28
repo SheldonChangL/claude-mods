@@ -11,7 +11,7 @@
 //   state.get/set    the screen shown (session state)
 //   store.get/set    your boards (kept across sessions)
 //   clock.*          the request gap, timeouts, the new-posts poll
-//   ui.*             the pane, focus after an action, Copy link, a toast, the debug log
+//   ui.*             the pane, focus after an action, ↑ Top, Copy link, a toast, the debug log
 //   command.register /ptt
 
 import { update } from 'claude-code'
@@ -45,6 +45,7 @@ function makePort($) {
       panes: () => $.ui.panes(),
       invalidate: () => $.ui.invalidate('ui.render'),
       focus: (key) => $.ui.focus({ requestId: 'ptt', key }),
+      scroll: (args) => $.ui.scroll(args),
       copy: (text, surface) => $.ui.copy({ text, surface }),
       toast: (text) => $.ui.toast(text),
     },
