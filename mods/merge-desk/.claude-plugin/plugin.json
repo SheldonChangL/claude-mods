@@ -1,0 +1,15 @@
+{
+  "name": "merge-desk",
+  "version": "0.1.1",
+  "description": "Merge finished branches into main and push them, step by step from a pane, and tell the next conversation what was integrated",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Sheldon Chang"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mods",
+    "pane",
+    "git"
+  ]
+}

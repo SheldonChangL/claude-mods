@@ -1,6 +1,6 @@
 {
   "name": "claude-mods",
-  "description": "Mods for Claude Code: a usage band, a tamagotchi-style aquarium, a narrator pane, a platformer that plays while Claude works, and a read-only PTT pane.",
+  "description": "Mods for Claude Code: a usage band, a tamagotchi-style aquarium, a narrator pane, a platformer that plays while Claude works, a read-only PTT pane, and a pane that merges finished branches step by step.",
   "owner": {
     "name": "Sheldon Chang"
   },
@@ -29,6 +29,11 @@
       "name": "ptt",
       "source": "./mods/ptt",
       "description": "A read-only PTT (批踢踢) pane: boards you pick, their new posts, a push-count filter, articles with their pushes, and the hot boards"
+    },
+    {
+      "name": "merge-desk",
+      "source": "./mods/merge-desk",
+      "description": "A pane that merges finished branches into main and pushes them, step by step, and tells the next conversation what was integrated"
     }
   ]
 }
