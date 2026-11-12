@@ -2,6 +2,9 @@
 // this session's context window, then this machine's CPU, memory and disk.
 // Design by Codex: on Desktop one tinted SVG capsule per meter (capsule.ts),
 // quota bars with a countdown to the reset; on the terminal thin `━━──` lines.
+// The disk capsule opens the disk scan's pane (disk-scan.tsx): on Desktop a
+// button shows over it on hover (an Svg cannot be pressed), on the terminal
+// the meter itself is the button.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
@@ -9,6 +12,7 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import type { Context, ProbeStatus, SysSample, Window } from '../types'
 import { GAP_CAPSULE, GAP_GROUP, capsuleLayout } from './capsule'
 import type { Capsule } from './capsule'
+import { openDiskScan, registerDiskScan, settleDiskScan } from './disk-scan'
 import { TERMINAL_FILL, lineSplitter, mergeWindows, meters, parseQuotaLine, parseSample, parseWindows, terminalLayout } from './model'
 
 const sys = atom({ plugin: 'pillbar', key: 'sys' } as const, null as SysSample | null)
@@ -144,9 +148,12 @@ async function pollStoredWindows($: EngineInterface) {
 }
 
 export const register: Register = on => {
+  registerDiskScan(on)
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await $.command.register({ name: 'pillbar', description: 'Show or hide the quota and system meters above the prompt' })
+    await settleDiskScan($)
     try {
       const usage = await $.session.usage()
       await rememberWindows($, toWindows(usage.rateLimits))
@@ -178,7 +185,7 @@ export const register: Register = on => {
       probe: await read($, probe),
       now: await $.clock.now(),
     })
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     // Another plugin's band (clawd-run's game) may sit beneath: draw it above
     // the meters rather than in its place, so the meters stay by the prompt.
     const below = await next(e)
@@ -197,6 +204,11 @@ export const register: Register = on => {
       const capsule = (c: Capsule) => (
         <Box key={`pillbar-${c.key}`} flexShrink={0}>
           <Svg source={c.svg} alt={c.alt} width={c.width} height={32} />
+          {c.key === 'disk' ? (
+            <Box position="absolute" top={0} left={0} display="none" hover={{ display: 'flex' }}>
+              <Button key="pillbar-disk-scan" label="磁碟盤點" onPress={() => void openDiskScan($)} />
+            </Box>
+          ) : null}
         </Box>
       )
       const group = (cs: Capsule[]) => (
@@ -217,15 +229,24 @@ export const register: Register = on => {
     const parts = band.meters.flatMap((t, i) => {
       const joint =
         i === 0 ? [] : [<Text color="inactive">{isRoomy ? (ms[i]!.group !== ms[i - 1]!.group ? ' ║ ' : ' │ ') : ' '}</Text>]
+      const texts = [
+        <Text color="text">{t.label}</Text>,
+        <Text color={t.tone === 'unknown' ? 'inactive' : 'text'}>{`${t.sep}${t.value}`}</Text>,
+        t.filled || t.track ? <Text color={TERMINAL_FILL[t.tone]}>{`${t.sep}${t.filled}`}</Text> : null,
+        t.track ? <Text color="inactive">{t.track}</Text> : null,
+        t.detail ? <Text color="subtle">{` ${t.detail}`}</Text> : null,
+      ]
       return [
         ...joint,
-        <Box key={`pillbar-${t.key}`} flexDirection="row" flexShrink={0}>
-          <Text color="text">{t.label}</Text>
-          <Text color={t.tone === 'unknown' ? 'inactive' : 'text'}>{`${t.sep}${t.value}`}</Text>
-          {t.filled || t.track ? <Text color={TERMINAL_FILL[t.tone]}>{`${t.sep}${t.filled}`}</Text> : null}
-          {t.track ? <Text color="inactive">{t.track}</Text> : null}
-          {t.detail ? <Text color="subtle">{` ${t.detail}`}</Text> : null}
-        </Box>,
+        t.key === 'disk' ? (
+          <Button key="pillbar-disk" plain onPress={() => void openDiskScan($)}>
+            {texts}
+          </Button>
+        ) : (
+          <Box key={`pillbar-${t.key}`} flexDirection="row" flexShrink={0}>
+            {texts}
+          </Box>
+        ),
       ]
     })
     return stack(
