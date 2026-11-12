@@ -157,7 +157,7 @@ describe('capsules', () => {
 const BAND = (bodyColumns: number) =>
   ({
     component: 'AbovePrompt',
-    props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+    props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   }) as const
 
 /** `$.store` beneath the plugin, readable by the test. */
@@ -175,7 +175,12 @@ async function start(
   $: any,
   on: any,
   surface: string,
-  { rateLimits = WINDOWS, stored, feed = [] }: { rateLimits?: unknown[]; stored?: unknown; feed?: unknown[] } = {},
+  {
+    rateLimits = WINDOWS,
+    stored,
+    feed = [],
+    scan = [],
+  }: { rateLimits?: unknown[]; stored?: unknown; feed?: unknown[]; scan?: string[] } = {},
 ) {
   const store = stubStore(on, stored === undefined ? {} : { windows: stored })
   on('clock.now', async () => ({ value: NOW }))
@@ -187,7 +192,12 @@ async function start(
   })
   on('command.register', async (_$: unknown, e: any) => ({ value: { command: e.name } }))
   on('session.usage', async () => ({ value: { startedAt: NOW, context: { ...CONTEXT, breakdown: { gridRows: [] } }, rateLimits } }))
-  on('process.spawn', async function* () {
+  on('process.spawn', async function* (_$: unknown, e: any) {
+    // The disk scan runs its script through bash; everything else is the feed.
+    if (e.argv[0] === '/bin/bash') {
+      for (const text of scan) yield { stream: 'stdout', text }
+      return { value: { code: 0, signal: null } }
+    }
     for (const line of feed) yield { stream: 'stdout', text: `${JSON.stringify(line)}\n` }
     yield { stream: 'stdout', text: `${JSON.stringify(SAMPLE)}\n` }
     return { value: { code: 0, signal: null } }
@@ -205,6 +215,19 @@ async function start(
 }
 
 const runPillbar = ($: any) => $.command.run({ command: 'pillbar', args: '' })
+
+const PANE = {
+  component: 'Pane',
+  requestId: 'pillbar-disk-scan',
+  props: { title: '磁碟盤點', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+} as const
+
+// The scan script's output, cut mid-line so the parser has to join pieces.
+const SCAN = [
+  'FREE\t100000000\t25000000\nITEM\tsafe\t5242880\tcargo\t/Users/me/Projects/x/tar',
+  'get\tRust build 產物\nITEM\tcheck\t1048576\tavd\t/Users/me/.android/avd/A.avd\t模擬器資料\n',
+  "ITEM\tsafe\t204800\trm\t/Users/me/it's here\t記錄檔\nnoise line\n",
+]
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: the band draws all six meters at every width, above nothing it replaces`, async ($, on) => {
@@ -244,6 +267,44 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: a fresh reading is stored for the next session`, async ($, on) => {
     const store = await start($, on, surface)
     expect(parseWindows(store.get('windows'))).toEqual(WINDOWS)
+  })
+
+  test(`${surface}: the disk capsule opens the disk scan, whose rows copy their commands`, async ($, on) => {
+    const opened: string[] = []
+    const copied: string[] = []
+    on('env.get', async () => ({ value: '/Users/me' }))
+    on('ui.open', async (_$: unknown, e: any) => {
+      opened.push(e.id)
+      return { value: { isPlaced: true } }
+    })
+    on('ui.copy', async (_$: unknown, e: any) => {
+      copied.push(e.text)
+      return { value: { isCopied: true } }
+    })
+    on('ui.toast', async () => ({ value: undefined }))
+    await start($, on, surface, { scan: SCAN })
+
+    // Desktop shows its button over the capsule on hover; the terminal's meter is the button.
+    const band = await $.ui.mount({ plugin: 'pillbar', surface, ...BAND(200) })
+    await band.press({ key: surface === 'desktop' ? 'pillbar-disk-scan' : 'pillbar-disk' })
+    await band.unmount()
+    expect(opened).toEqual(['pillbar-disk-scan'])
+
+    const pane = await $.ui.mount({ plugin: 'pillbar', surface, ...PANE })
+    expect(await pane.find({ type: 'Text', text: /可用 23\.8G／已用 75%/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /可安全刪除：2 項，共 5\.2G/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /需要你確認：1 項，共 1\.0G/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /^~\/Projects\/x\/target$/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /掃描完成/ })).toBeDefined()
+    await pane.press({ key: 'copy:/Users/me/Projects/x/target' })
+    await pane.press({ key: "copy:/Users/me/it's here" })
+    await pane.press({ key: 'copy:/Users/me/.android/avd/A.avd' })
+    await pane.unmount()
+    expect(copied).toEqual([
+      "cargo clean --manifest-path '/Users/me/Projects/x/Cargo.toml'",
+      "rm -rf '/Users/me/it'\\''s here'",
+      '/Users/me/.android/avd/A.avd',
+    ])
   })
 
   test(`${surface}: /pillbar hides the band and shows it again`, async ($, on) => {
